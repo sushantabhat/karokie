@@ -10,7 +10,10 @@ export default function KaraokeStudio() {
   const [headphonesConfirmed, setHeadphonesConfirmed] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   
-  const { isRecording, recordedBlob, startRecording, stopRecording, resetRecording } = useAudioRecorder();
+  const { 
+    isRecording, isPaused: isRecPaused, recordedBlob, 
+    startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording 
+  } = useAudioRecorder();
   const { 
     loadTrack, loadVocal, playPreview, stopPreview, pausePreview, resumePreview, exportMix, 
     isPlaying, isPaused, isProcessing, setTrackVolumeLive, setVocalVolumeLive 
@@ -25,6 +28,27 @@ export default function KaraokeStudio() {
 
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+
+  // Time tracker for UI
+  useEffect(() => {
+    let interval: NodeJS.Timeout;
+    if (isRecording && !isRecPaused) {
+      interval = setInterval(() => {
+        if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
+      }, 100);
+    } else if (isPlaying && !isPaused) {
+      interval = setInterval(() => {
+        setCurrentTime(prev => prev + 0.1);
+      }, 100);
+    }
+    return () => clearInterval(interval);
+  }, [isRecording, isRecPaused, isPlaying, isPaused]);
+
+  // Reset time when stopping
+  useEffect(() => {
+    if (!isRecording && !isPlaying) setCurrentTime(0);
+  }, [isRecording, isPlaying]);
 
   const handleTrackUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -51,6 +75,16 @@ export default function KaraokeStudio() {
     }
 
     setCountdown(3);
+  };
+
+  const handlePauseResumeRecording = () => {
+    if (isRecPaused) {
+      resumeRecording();
+      if (audioRef.current) audioRef.current.play();
+    } else {
+      pauseRecording();
+      if (audioRef.current) audioRef.current.pause();
+    }
   };
 
   useEffect(() => {
@@ -109,6 +143,13 @@ export default function KaraokeStudio() {
     setMixSettings(prev => ({ ...prev, [key]: value }));
   };
 
+  const formatTime = (time: number) => {
+    const m = Math.floor(time / 60);
+    const s = Math.floor(time % 60);
+    const ms = Math.floor((time % 1) * 10);
+    return `${m}:${s.toString().padStart(2, '0')}.${ms}`;
+  };
+
   return (
     <div className="min-h-screen bg-[#131315] text-[#fafafa] font-sans flex overflow-hidden">
       
@@ -155,7 +196,10 @@ export default function KaraokeStudio() {
               <h1 className="text-2xl font-bold tracking-tight">Karaoke Studio</h1>
               <p className="text-sm text-[#a1a1aa] mt-1">Browser-based multi-track recording environment</p>
             </div>
-            <div className="mt-4 md:mt-0 flex gap-4">
+            <div className="mt-4 md:mt-0 flex flex-col md:items-end gap-2">
+              <div className="text-3xl font-mono tracking-tight text-[#3b82f6]">
+                {formatTime(currentTime)}
+              </div>
               <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
                 <div className="w-2 h-2 rounded-full bg-[#10b981]"></div> System Ready
               </div>
@@ -250,12 +294,20 @@ export default function KaraokeStudio() {
                         <Mic className="w-5 h-5" />
                       </button>
                     ) : (
-                      <button 
-                        onClick={handleStopRecording}
-                        className="bg-[#121214] border border-[#ef4444] text-[#ef4444] w-12 h-12 rounded flex items-center justify-center transition-transform hover:scale-95"
-                      >
-                        <Square className="w-4 h-4 fill-current" />
-                      </button>
+                      <div className="flex gap-4">
+                        <button 
+                          onClick={handlePauseResumeRecording}
+                          className="bg-[#121214] border border-[#f59e0b] text-[#f59e0b] w-12 h-12 rounded flex items-center justify-center transition-transform hover:scale-95"
+                        >
+                          {isRecPaused ? <Play className="w-4 h-4 fill-current" /> : <Pause className="w-4 h-4 fill-current" />}
+                        </button>
+                        <button 
+                          onClick={handleStopRecording}
+                          className="bg-[#121214] border border-[#ef4444] text-[#ef4444] w-12 h-12 rounded flex items-center justify-center transition-transform hover:scale-95"
+                        >
+                          <Square className="w-4 h-4 fill-current" />
+                        </button>
+                      </div>
                     )}
                     <p className="text-xs font-mono text-[#a1a1aa]">
                       {isRecording ? 'Capturing Audio...' : recordedBlob ? 'Take Complete - Ready to Overwrite' : 'Arm Recording'}

@@ -4,6 +4,7 @@ import { useState, useRef, useCallback } from 'react';
 
 export function useAudioRecorder() {
   const [isRecording, setIsRecording] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
@@ -43,27 +44,47 @@ export function useAudioRecorder() {
   }, []);
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current && isRecording) {
+    if (mediaRecorderRef.current && (isRecording || isPaused)) {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
+      setIsPaused(false);
       
       // Stop all tracks to release the microphone
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
       }
     }
-  }, [isRecording]);
+  }, [isRecording, isPaused]);
+
+  const pauseRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isRecording && !isPaused) {
+      mediaRecorderRef.current.pause();
+      setIsPaused(true);
+    }
+  }, [isRecording, isPaused]);
+
+  const resumeRecording = useCallback(() => {
+    if (mediaRecorderRef.current && isPaused) {
+      mediaRecorderRef.current.resume();
+      setIsPaused(false);
+    }
+  }, [isPaused]);
 
   const resetRecording = useCallback(() => {
     setRecordedBlob(null);
     chunksRef.current = [];
+    setIsPaused(false);
+    setIsRecording(false);
   }, []);
 
   return {
     isRecording,
+    isPaused,
     recordedBlob,
     startRecording,
     stopRecording,
+    pauseRecording,
+    resumeRecording,
     resetRecording,
   };
 }
