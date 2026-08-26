@@ -12,6 +12,7 @@ export interface MixSettings {
 
 export function useAudioMixer() {
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isPaused, setIsPaused] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   
   // Buffers
@@ -144,8 +145,26 @@ export function useAudioMixer() {
     if (vocalSourceRef.current) {
       try { vocalSourceRef.current.stop(); } catch (e) {}
     }
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
     setIsPlaying(false);
+    setIsPaused(false);
   }, []);
+
+  const pausePreview = useCallback(() => {
+    if (audioContextRef.current && isPlaying) {
+      audioContextRef.current.suspend();
+      setIsPaused(true);
+    }
+  }, [isPlaying]);
+
+  const resumePreview = useCallback(() => {
+    if (audioContextRef.current && isPaused) {
+      audioContextRef.current.resume();
+      setIsPaused(false);
+    }
+  }, [isPaused]);
 
   // Real-time volume updates
   const setTrackVolumeLive = useCallback((volume: number) => {
@@ -166,11 +185,10 @@ export function useAudioMixer() {
     
     try {
       const sampleRate = trackBufferRef.current.sampleRate;
-      // Calculate length based on latency offset
-      const lengthSeconds = Math.max(
-        trackBufferRef.current.duration + (settings.latencyOffsetMs < 0 ? Math.abs(settings.latencyOffsetMs) / 1000 : 0),
-        vocalBufferRef.current.duration + (settings.latencyOffsetMs > 0 ? settings.latencyOffsetMs / 1000 : 0)
-      );
+      
+      // Trim the export to end exactly when the vocal recording ends
+      const vocalDuration = vocalBufferRef.current.duration;
+      const lengthSeconds = vocalDuration + (settings.latencyOffsetMs > 0 ? settings.latencyOffsetMs / 1000 : 0);
       
       const offlineCtx = new OfflineAudioContext(
         2, 
@@ -234,8 +252,11 @@ export function useAudioMixer() {
     loadVocal,
     playPreview,
     stopPreview,
+    pausePreview,
+    resumePreview,
     exportMix,
     isPlaying,
+    isPaused,
     isProcessing,
     setTrackVolumeLive,
     setVocalVolumeLive,

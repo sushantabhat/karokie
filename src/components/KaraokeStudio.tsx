@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Headphones, Mic, Play, Square, Settings2, Download, CheckCircle2 } from 'lucide-react';
+import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2 } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 
@@ -12,8 +12,8 @@ export default function KaraokeStudio() {
   
   const { isRecording, recordedBlob, startRecording, stopRecording, resetRecording } = useAudioRecorder();
   const { 
-    loadTrack, loadVocal, playPreview, stopPreview, exportMix, 
-    isPlaying, isProcessing, setTrackVolumeLive, setVocalVolumeLive 
+    loadTrack, loadVocal, playPreview, stopPreview, pausePreview, resumePreview, exportMix, 
+    isPlaying, isPaused, isProcessing, setTrackVolumeLive, setVocalVolumeLive 
   } = useAudioMixer();
 
   const [mixSettings, setMixSettings] = useState<MixSettings>({
@@ -95,7 +95,11 @@ export default function KaraokeStudio() {
 
   const handlePlayPreview = () => {
     if (isPlaying) {
-      stopPreview();
+      if (isPaused) {
+        resumePreview();
+      } else {
+        pausePreview();
+      }
     } else {
       playPreview(mixSettings);
     }
@@ -227,13 +231,24 @@ export default function KaraokeStudio() {
               <span className="bg-gray-800 w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
               Mix & Export
             </h2>
-            <button 
-              onClick={handlePlayPreview}
-              className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg text-sm font-medium transition-colors"
-            >
-              {isPlaying ? <Square className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-              <span>{isPlaying ? 'Stop Preview' : 'Play Preview'}</span>
-            </button>
+            <div className="flex items-center space-x-4">
+              <button 
+                onClick={handlePlayPreview}
+                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg text-sm font-medium transition-colors"
+              >
+                {isPlaying && !isPaused ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                <span>{isPlaying && !isPaused ? 'Pause' : isPlaying && isPaused ? 'Resume' : 'Play Preview'}</span>
+              </button>
+              {isPlaying && (
+                <button 
+                  onClick={stopPreview}
+                  className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                >
+                  <Square className="w-4 h-4" />
+                  <span>Stop</span>
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
