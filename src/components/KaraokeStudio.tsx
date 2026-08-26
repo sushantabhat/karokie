@@ -109,32 +109,34 @@ export default function KaraokeStudio() {
     setMixSettings(prev => ({ ...prev, [key]: value }));
   };
 
-  const isReadyToRecord = trackFile && headphonesConfirmed;
-
   return (
-    <div className="min-h-screen bg-gray-950 text-white p-8">
-      <div className="max-w-4xl mx-auto space-y-8">
+    <div className="min-h-screen bg-[#131315] text-[#fafafa] p-8 font-sans">
+      <div className="max-w-5xl mx-auto space-y-6">
         
-        <header className="text-center space-y-2">
-          <h1 className="text-4xl font-bold bg-gradient-to-r from-purple-400 to-pink-600 text-transparent bg-clip-text">
-            Karaoke Studio
-          </h1>
-          <p className="text-gray-400">Record, mix, and export your next hit entirely in the browser.</p>
+        <header className="flex flex-col md:flex-row md:items-center justify-between border-b border-[#27272a] pb-6 mb-8">
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight">Pro Audio Karaoke Studio</h1>
+            <p className="text-sm text-[#a1a1aa] mt-1">Browser-based multi-track recording environment</p>
+          </div>
+          <div className="mt-4 md:mt-0 flex gap-4">
+            <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
+              <div className="w-2 h-2 rounded-full bg-[#10b981]"></div> System Ready
+            </div>
+          </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
           {/* TRACK UPLOAD PANEL */}
-          <div className="bg-gray-900 rounded-xl p-8 space-y-6 flex flex-col">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <span className="bg-gray-800 w-8 h-8 rounded-full flex items-center justify-center text-sm">1</span>
-              Backing Track
-            </h2>
+          <div className="bg-[#1b1b1d] border border-[#27272a] rounded p-6 space-y-4 flex flex-col">
+            <div className="flex items-center justify-between border-b border-[#27272a] pb-4">
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Track 1: Instrumentals</h2>
+            </div>
             
             {!trackFile ? (
               <div 
                 onClick={() => document.getElementById('file-upload')?.click()}
-                className="flex-1 border-2 border-dashed border-gray-700 rounded-xl p-8 text-center hover:bg-gray-800 transition-colors cursor-pointer flex flex-col justify-center items-center"
+                className="flex-1 border border-dashed border-[#424754] bg-[#201f21] rounded p-8 text-center hover:bg-[#2a2a2c] transition-colors cursor-pointer flex flex-col justify-center items-center"
               >
                 <input 
                   id="file-upload"
@@ -143,16 +145,16 @@ export default function KaraokeStudio() {
                   onChange={handleTrackUpload}
                   className="hidden"
                 />
-                <Upload className="w-10 h-10 mb-3 text-gray-500" />
-                <h3 className="font-medium">Upload Audio</h3>
-                <p className="text-sm text-gray-500 mt-1">MP3, WAV, AAC</p>
+                <Upload className="w-6 h-6 mb-3 text-[#a1a1aa]" />
+                <h3 className="text-sm font-medium">Load Backing Track</h3>
+                <p className="text-xs text-[#a1a1aa] mt-1 font-mono">MP3 / WAV / AAC</p>
               </div>
             ) : (
-              <div className="flex-1 bg-gray-800 rounded-xl p-6 flex flex-col justify-center items-center text-center space-y-4 border border-green-500/30">
-                <CheckCircle2 className="w-12 h-12 text-green-500" />
+              <div className="flex-1 bg-[#201f21] border border-[#27272a] rounded p-6 flex flex-col justify-center items-center text-center space-y-4">
+                <CheckCircle2 className="w-8 h-8 text-[#10b981]" />
                 <div>
-                  <h3 className="font-medium">{trackFile.name}</h3>
-                  <p className="text-sm text-gray-400 mt-1">Track loaded and ready</p>
+                  <h3 className="text-sm font-medium font-mono">{trackFile.name}</h3>
+                  <p className="text-xs text-[#a1a1aa] mt-1">Track loaded and ready</p>
                 </div>
                 <button 
                   onClick={() => {
@@ -163,7 +165,7 @@ export default function KaraokeStudio() {
                       audioRef.current = null;
                     }
                   }}
-                  className="text-sm text-gray-400 hover:text-white underline"
+                  className="text-xs text-[#3b82f6] hover:text-[#4d8eff] underline"
                 >
                   Change Track
                 </button>
@@ -172,54 +174,54 @@ export default function KaraokeStudio() {
           </div>
 
           {/* HEADPHONES & RECORD PANEL */}
-          <div className={`bg-gray-900 rounded-xl p-8 space-y-6 flex flex-col transition-opacity duration-300 ${!trackFile ? 'opacity-50 pointer-events-none' : ''}`}>
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <span className="bg-gray-800 w-8 h-8 rounded-full flex items-center justify-center text-sm">2</span>
-              Vocals
-            </h2>
+          <div className={`bg-[#1b1b1d] border border-[#27272a] rounded p-6 space-y-4 flex flex-col transition-opacity duration-300 ${!trackFile ? 'opacity-50 pointer-events-none' : ''}`}>
+            <div className="flex items-center justify-between border-b border-[#27272a] pb-4">
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Track 2: Vocals</h2>
+              {isRecording && <div className="text-xs font-mono text-[#ef4444] animate-pulse flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#ef4444]"></div> REC</div>}
+            </div>
 
             {!headphonesConfirmed ? (
-              <div className="flex-1 bg-gray-800 rounded-xl p-6 text-center space-y-4 flex flex-col justify-center items-center">
-                <Headphones className="w-10 h-10 text-yellow-500" />
-                <p className="text-sm text-gray-400">Please wear headphones to prevent microphone feedback.</p>
+              <div className="flex-1 bg-[#201f21] border border-[#27272a] rounded p-6 text-center space-y-4 flex flex-col justify-center items-center">
+                <Headphones className="w-8 h-8 text-[#f59e0b]" />
+                <p className="text-xs text-[#a1a1aa]">Monitor required. Please wear headphones to prevent feedback loops.</p>
                 <button 
                   onClick={() => setHeadphonesConfirmed(true)}
-                  className="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="bg-[#3b82f6] hover:bg-[#4d8eff] text-white px-4 py-2 rounded text-xs font-medium transition-colors"
                 >
-                  Headphones Connected
+                  Confirm Monitor Active
                 </button>
               </div>
             ) : (
-              <div className="flex-1 bg-gray-800 rounded-xl p-6 flex flex-col justify-center items-center space-y-6 border border-purple-500/30">
+              <div className="flex-1 bg-[#201f21] border border-[#27272a] rounded p-6 flex flex-col justify-center items-center space-y-6">
                 {countdown !== null ? (
-                  <div className="text-6xl font-bold text-purple-500 animate-pulse">
-                    {countdown || 'GO!'}
+                  <div className="text-5xl font-mono font-bold text-[#3b82f6]">
+                    {countdown || 'GO'}
                   </div>
                 ) : (
                   <>
                     <canvas 
                       ref={canvasRef} 
-                      className="w-full h-16 bg-black rounded-lg" 
+                      className="w-full h-12 bg-[#121214] border border-[#27272a] rounded" 
                       width={400} 
-                      height={64}
+                      height={48}
                     />
                     {!isRecording ? (
                       <button 
                         onClick={handleStartRecording}
-                        className="bg-red-500 hover:bg-red-600 text-white w-16 h-16 rounded-full flex items-center justify-center transition-transform hover:scale-105"
+                        className="bg-[#ef4444] hover:bg-[#dc2626] text-white w-12 h-12 rounded flex items-center justify-center transition-transform hover:scale-95"
                       >
-                        <Mic className="w-6 h-6" />
+                        <Mic className="w-5 h-5" />
                       </button>
                     ) : (
                       <button 
                         onClick={handleStopRecording}
-                        className="bg-gray-900 border-2 border-red-500 text-white w-16 h-16 rounded-full flex items-center justify-center transition-transform hover:scale-105 animate-pulse"
+                        className="bg-[#121214] border border-[#ef4444] text-[#ef4444] w-12 h-12 rounded flex items-center justify-center transition-transform hover:scale-95"
                       >
-                        <Square className="w-5 h-5 text-red-500 fill-current" />
+                        <Square className="w-4 h-4 fill-current" />
                       </button>
                     )}
-                    <p className="text-sm text-gray-400">
-                      {isRecording ? 'Recording...' : recordedBlob ? 'Ready to re-record' : 'Click to start'}
+                    <p className="text-xs font-mono text-[#a1a1aa]">
+                      {isRecording ? 'Capturing Audio...' : recordedBlob ? 'Take Complete - Ready to Overwrite' : 'Arm Recording'}
                     </p>
                   </>
                 )}
@@ -229,41 +231,40 @@ export default function KaraokeStudio() {
         </div>
 
         {/* MIX & EXPORT PANEL */}
-        <div className={`bg-gray-900 rounded-xl p-8 space-y-8 transition-opacity duration-300 ${!recordedBlob ? 'opacity-50 pointer-events-none' : ''}`}>
-          <div className="flex items-center justify-between">
-            <h2 className="text-xl font-bold flex items-center gap-2">
-              <span className="bg-gray-800 w-8 h-8 rounded-full flex items-center justify-center text-sm">3</span>
-              Mix & Export
-            </h2>
-            <div className="flex items-center space-x-4">
+        <div className={`bg-[#1b1b1d] border border-[#27272a] rounded p-6 space-y-6 transition-opacity duration-300 ${!recordedBlob ? 'opacity-50 pointer-events-none' : ''}`}>
+          <div className="flex items-center justify-between border-b border-[#27272a] pb-4">
+            <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Master Bus</h2>
+            
+            <div className="flex items-center space-x-2">
               <button 
                 onClick={handlePlayPreview}
-                className="flex items-center space-x-2 bg-purple-600 hover:bg-purple-700 px-6 py-2 rounded-lg text-sm font-medium transition-colors"
+                className="flex items-center space-x-2 bg-[#3b82f6] hover:bg-[#4d8eff] px-4 py-1.5 rounded text-xs font-medium transition-colors"
               >
-                {isPlaying && !isPaused ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                <span>{isPlaying && !isPaused ? 'Pause' : isPlaying && isPaused ? 'Resume' : 'Play Preview'}</span>
+                {isPlaying && !isPaused ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
+                <span>{isPlaying && !isPaused ? 'Pause' : isPlaying && isPaused ? 'Resume' : 'Preview Mix'}</span>
               </button>
               {isPlaying && (
                 <button 
                   onClick={stopPreview}
-                  className="flex items-center space-x-2 bg-gray-700 hover:bg-gray-600 px-4 py-2 rounded-lg text-sm font-medium transition-colors"
+                  className="flex items-center space-x-2 bg-[#27272a] hover:bg-[#353437] px-4 py-1.5 rounded text-xs font-medium transition-colors"
                 >
-                  <Square className="w-4 h-4" />
+                  <Square className="w-3.5 h-3.5" />
                   <span>Stop</span>
                 </button>
               )}
             </div>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
-            <div className="space-y-6 p-6 bg-gray-800 rounded-lg">
-              <div className="flex items-center space-x-2 mb-4 text-purple-400">
-                <Settings2 className="w-5 h-5" />
-                <h3 className="font-medium">Volume</h3>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            {/* Volume Mixers */}
+            <div className="space-y-4 p-4 bg-[#201f21] border border-[#27272a] rounded">
+              <div className="flex items-center space-x-2 mb-2 text-[#a1a1aa]">
+                <Settings2 className="w-4 h-4" />
+                <h3 className="text-xs font-medium uppercase tracking-wide">Faders</h3>
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Backing Track</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-mono text-[#a1a1aa]">
+                  <span>Track 1</span>
                   <span>{mixSettings.trackVolume}%</span>
                 </div>
                 <input 
@@ -274,12 +275,12 @@ export default function KaraokeStudio() {
                     updateSetting('trackVolume', val);
                     if (isPlaying) setTrackVolumeLive(val);
                   }}
-                  className="w-full accent-purple-500"
+                  className="w-full h-1 bg-[#121214] rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#3b82f6] [&::-webkit-slider-thumb]:rounded-sm"
                 />
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Vocals</span>
+              <div className="space-y-1 pt-2">
+                <div className="flex justify-between text-xs font-mono text-[#a1a1aa]">
+                  <span>Track 2</span>
                   <span>{mixSettings.vocalVolume}%</span>
                 </div>
                 <input 
@@ -290,48 +291,49 @@ export default function KaraokeStudio() {
                     updateSetting('vocalVolume', val);
                     if (isPlaying) setVocalVolumeLive(val);
                   }}
-                  className="w-full accent-purple-500"
+                  className="w-full h-1 bg-[#121214] rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#3b82f6] [&::-webkit-slider-thumb]:rounded-sm"
                 />
               </div>
             </div>
 
-            <div className="space-y-6 p-6 bg-gray-800 rounded-lg">
-              <div className="flex items-center space-x-2 mb-4 text-pink-400">
-                <Settings2 className="w-5 h-5" />
-                <h3 className="font-medium">Effects</h3>
+            {/* Effects & DSP */}
+            <div className="space-y-4 p-4 bg-[#201f21] border border-[#27272a] rounded">
+              <div className="flex items-center space-x-2 mb-2 text-[#a1a1aa]">
+                <Settings2 className="w-4 h-4" />
+                <h3 className="text-xs font-medium uppercase tracking-wide">DSP & Timing</h3>
               </div>
-              <div className="space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span>Latency Offset</span>
+              <div className="space-y-1">
+                <div className="flex justify-between text-xs font-mono text-[#a1a1aa]">
+                  <span>Sync Offset</span>
                   <span>{mixSettings.latencyOffsetMs}ms</span>
                 </div>
                 <input 
                   type="range" min="-300" max="300" 
                   value={mixSettings.latencyOffsetMs}
                   onChange={(e) => updateSetting('latencyOffsetMs', Number(e.target.value))}
-                  className="w-full accent-pink-500"
+                  className="w-full h-1 bg-[#121214] rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#10b981] [&::-webkit-slider-thumb]:rounded-sm"
                 />
               </div>
               <div className="flex items-center justify-between pt-4">
-                <span>Studio Reverb</span>
+                <span className="text-xs font-mono text-[#a1a1aa]">Studio Reverb</span>
                 <button 
                   onClick={() => updateSetting('reverbEnabled', !mixSettings.reverbEnabled)}
-                  className={`w-12 h-6 rounded-full transition-colors relative ${mixSettings.reverbEnabled ? 'bg-pink-500' : 'bg-gray-600'}`}
+                  className={`w-10 h-5 rounded transition-colors relative border ${mixSettings.reverbEnabled ? 'bg-[#3b82f6] border-[#3b82f6]' : 'bg-[#121214] border-[#424754]'}`}
                 >
-                  <div className={`absolute top-1 left-1 w-4 h-4 rounded-full bg-white transition-transform ${mixSettings.reverbEnabled ? 'translate-x-6' : ''}`} />
+                  <div className={`absolute top-0.5 left-0.5 w-4 h-3.5 rounded-sm bg-white transition-transform ${mixSettings.reverbEnabled ? 'translate-x-4.5' : ''}`} />
                 </button>
               </div>
             </div>
           </div>
 
-          <div className="pt-4 flex justify-end border-t border-gray-800">
+          <div className="pt-4 flex justify-end">
             <button 
               onClick={handleExport}
               disabled={isProcessing}
-              className="flex items-center space-x-2 bg-gradient-to-r from-purple-500 to-pink-600 hover:from-purple-600 hover:to-pink-700 px-8 py-3 rounded-lg font-bold transition-all transform hover:scale-105 disabled:opacity-50 disabled:scale-100"
+              className="flex items-center space-x-2 bg-white text-black hover:bg-gray-200 px-6 py-2 rounded text-xs font-bold transition-all disabled:opacity-50"
             >
-              <Download className="w-5 h-5" />
-              <span>{isProcessing ? 'Processing...' : 'Export Mix'}</span>
+              <Download className="w-4 h-4" />
+              <span>{isProcessing ? 'Rendering Audio...' : 'Bounce Mix (WAV)'}</span>
             </button>
           </div>
         </div>
