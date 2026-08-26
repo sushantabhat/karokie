@@ -74,6 +74,20 @@ export function useAudioMixer() {
     return audioBuffer;
   }, []);
 
+  const stopPreview = useCallback(() => {
+    if (trackSourceRef.current) {
+      try { trackSourceRef.current.stop(); } catch (e) {}
+    }
+    if (vocalSourceRef.current) {
+      try { vocalSourceRef.current.stop(); } catch (e) {}
+    }
+    if (audioContextRef.current?.state === 'suspended') {
+      audioContextRef.current.resume();
+    }
+    setIsPlaying(false);
+    setIsPaused(false);
+  }, []);
+
   const playPreview = useCallback((settings: MixSettings) => {
     if (!audioContextRef.current || !trackBufferRef.current || !vocalBufferRef.current) return;
     
@@ -137,20 +151,6 @@ export function useAudioMixer() {
     
     trackSourceRef.current.onended = () => setIsPlaying(false);
   }, [stopPreview]);
-
-  const stopPreview = useCallback(() => {
-    if (trackSourceRef.current) {
-      try { trackSourceRef.current.stop(); } catch (e) {}
-    }
-    if (vocalSourceRef.current) {
-      try { vocalSourceRef.current.stop(); } catch (e) {}
-    }
-    if (audioContextRef.current?.state === 'suspended') {
-      audioContextRef.current.resume();
-    }
-    setIsPlaying(false);
-    setIsPaused(false);
-  }, []);
 
   const pausePreview = useCallback(() => {
     if (audioContextRef.current && isPlaying) {
