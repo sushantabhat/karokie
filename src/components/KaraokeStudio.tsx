@@ -320,14 +320,15 @@ export default function KaraokeStudio() {
         </div>
 
         {/* MIX & EXPORT PANEL */}
-        <div className={`bg-[#1b1b1d] border border-[#27272a] rounded p-6 space-y-6 transition-opacity duration-300 ${!recordedBlob ? 'opacity-50 pointer-events-none' : ''}`}>
+        <div className={`bg-[#1b1b1d] border border-[#27272a] rounded p-6 space-y-6 transition-opacity duration-300 ${!recordedBlob ? 'opacity-50' : ''}`}>
           <div className="flex items-center justify-between border-b border-[#27272a] pb-4">
             <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Master Bus</h2>
             
             <div className="flex items-center space-x-2">
               <button 
                 onClick={handlePlayPreview}
-                className="flex items-center space-x-2 bg-[#3b82f6] hover:bg-[#4d8eff] px-4 py-1.5 rounded text-xs font-medium transition-colors"
+                disabled={!recordedBlob}
+                className="flex items-center space-x-2 bg-[#3b82f6] hover:bg-[#4d8eff] px-4 py-1.5 rounded text-xs font-medium transition-colors disabled:opacity-50 disabled:pointer-events-none"
               >
                 {isPlaying && !isPaused ? <Pause className="w-3.5 h-3.5" /> : <Play className="w-3.5 h-3.5" />}
                 <span>{isPlaying && !isPaused ? 'Pause' : isPlaying && isPaused ? 'Resume' : 'Preview Mix'}</span>
@@ -363,6 +364,7 @@ export default function KaraokeStudio() {
                     const val = Number(e.target.value);
                     updateSetting('trackVolume', val);
                     if (isPlaying) setTrackVolumeLive(val);
+                    if (audioRef.current) audioRef.current.volume = Math.min(val / 100, 1);
                   }}
                   className="w-full h-1 bg-[#121214] rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#3b82f6] [&::-webkit-slider-thumb]:rounded-sm"
                 />
@@ -418,8 +420,8 @@ export default function KaraokeStudio() {
           <div className="pt-4 flex justify-end">
             <button 
               onClick={handleExport}
-              disabled={isProcessing}
-              className="flex items-center space-x-2 bg-white text-black hover:bg-gray-200 px-6 py-2 rounded text-xs font-bold transition-all disabled:opacity-50"
+              disabled={isProcessing || !recordedBlob}
+              className="flex items-center space-x-2 bg-white text-black hover:bg-gray-200 px-6 py-2 rounded text-xs font-bold transition-all disabled:opacity-50 disabled:pointer-events-none"
             >
               <Download className="w-4 h-4" />
               <span>{isProcessing ? 'Rendering Audio...' : 'Bounce Mix (WAV)'}</span>
