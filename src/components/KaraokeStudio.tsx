@@ -11,7 +11,10 @@ export default function KaraokeStudio() {
   const [countdown, setCountdown] = useState<number | null>(null);
   
   const { isRecording, recordedBlob, startRecording, stopRecording, resetRecording } = useAudioRecorder();
-  const { loadTrack, loadVocal, playPreview, stopPreview, exportMix, isPlaying, isProcessing } = useAudioMixer();
+  const { 
+    loadTrack, loadVocal, playPreview, stopPreview, exportMix, 
+    isPlaying, isProcessing, setTrackVolumeLive, setVocalVolumeLive 
+  } = useAudioMixer();
 
   const [mixSettings, setMixSettings] = useState<MixSettings>({
     trackVolume: 80,
@@ -247,7 +250,11 @@ export default function KaraokeStudio() {
                 <input 
                   type="range" min="0" max="200" 
                   value={mixSettings.trackVolume}
-                  onChange={(e) => updateSetting('trackVolume', Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    updateSetting('trackVolume', val);
+                    if (isPlaying) setTrackVolumeLive(val);
+                  }}
                   className="w-full accent-purple-500"
                 />
               </div>
@@ -259,7 +266,11 @@ export default function KaraokeStudio() {
                 <input 
                   type="range" min="0" max="200" 
                   value={mixSettings.vocalVolume}
-                  onChange={(e) => updateSetting('vocalVolume', Number(e.target.value))}
+                  onChange={(e) => {
+                    const val = Number(e.target.value);
+                    updateSetting('vocalVolume', val);
+                    if (isPlaying) setVocalVolumeLive(val);
+                  }}
                   className="w-full accent-purple-500"
                 />
               </div>

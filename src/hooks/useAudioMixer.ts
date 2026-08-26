@@ -135,7 +135,7 @@ export function useAudioMixer() {
     setIsPlaying(true);
     
     trackSourceRef.current.onended = () => setIsPlaying(false);
-  }, []);
+  }, [stopPreview]);
 
   const stopPreview = useCallback(() => {
     if (trackSourceRef.current) {
@@ -145,6 +145,19 @@ export function useAudioMixer() {
       try { vocalSourceRef.current.stop(); } catch (e) {}
     }
     setIsPlaying(false);
+  }, []);
+
+  // Real-time volume updates
+  const setTrackVolumeLive = useCallback((volume: number) => {
+    if (trackGainRef.current && audioContextRef.current) {
+      trackGainRef.current.gain.setTargetAtTime(volume / 100, audioContextRef.current.currentTime, 0.05);
+    }
+  }, []);
+
+  const setVocalVolumeLive = useCallback((volume: number) => {
+    if (vocalGainRef.current && audioContextRef.current) {
+      vocalGainRef.current.gain.setTargetAtTime(volume / 100, audioContextRef.current.currentTime, 0.05);
+    }
   }, []);
 
   const exportMix = useCallback(async (settings: MixSettings): Promise<Blob | null> => {
@@ -224,5 +237,7 @@ export function useAudioMixer() {
     exportMix,
     isPlaying,
     isProcessing,
+    setTrackVolumeLive,
+    setVocalVolumeLive,
   };
 }
