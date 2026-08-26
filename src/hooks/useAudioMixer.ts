@@ -88,12 +88,15 @@ export function useAudioMixer() {
     setIsPaused(false);
   }, []);
 
-  const playPreview = useCallback((settings: MixSettings) => {
+  const playPreview = useCallback(async (settings: MixSettings) => {
     if (!audioContextRef.current || !trackBufferRef.current || !vocalBufferRef.current) return;
     
     stopPreview(); // Stop existing
 
     const ctx = audioContextRef.current;
+    if (ctx.state === 'suspended') {
+      await ctx.resume();
+    }
     
     // Track setup
     trackSourceRef.current = ctx.createBufferSource();

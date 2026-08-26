@@ -158,6 +158,10 @@ export default function KaraokeStudio() {
                   onClick={() => {
                     setTrackFile(null);
                     setHeadphonesConfirmed(false);
+                    if (audioRef.current) {
+                      audioRef.current.pause();
+                      audioRef.current = null;
+                    }
                   }}
                   className="text-sm text-gray-400 hover:text-white underline"
                 >
