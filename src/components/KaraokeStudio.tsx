@@ -110,20 +110,57 @@ export default function KaraokeStudio() {
   };
 
   return (
-    <div className="min-h-screen bg-[#131315] text-[#fafafa] p-8 font-sans">
-      <div className="max-w-5xl mx-auto space-y-6">
-        
-        <header className="flex flex-col md:flex-row md:items-center justify-between border-b border-[#27272a] pb-6 mb-8">
+    <div className="min-h-screen bg-[#131315] text-[#fafafa] font-sans flex overflow-hidden">
+      
+      {/* LEFT SIDEBAR */}
+      <aside className="w-64 bg-[#1b1b1d] border-r border-[#27272a] hidden md:flex flex-col">
+        <div className="h-12 border-b border-[#27272a] flex items-center px-4">
+          <h1 className="text-xs font-bold tracking-widest uppercase">Pro Audio</h1>
+        </div>
+        <nav className="flex-1 p-4 space-y-6">
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Pro Audio Karaoke Studio</h1>
-            <p className="text-sm text-[#a1a1aa] mt-1">Browser-based multi-track recording environment</p>
+            <h2 className="text-[10px] font-mono text-[#a1a1aa] mb-3 uppercase tracking-wider">Library</h2>
+            <ul className="space-y-1">
+              <li>
+                <button className="w-full text-left px-2 py-1.5 rounded text-xs bg-[#3b82f6] text-white">Current Session</button>
+              </li>
+              <li>
+                <button className="w-full text-left px-2 py-1.5 rounded text-xs text-[#a1a1aa] hover:bg-[#201f21] hover:text-white transition-colors">Vocal Takes</button>
+              </li>
+              <li>
+                <button className="w-full text-left px-2 py-1.5 rounded text-xs text-[#a1a1aa] hover:bg-[#201f21] hover:text-white transition-colors">Exported Mixes</button>
+              </li>
+            </ul>
           </div>
-          <div className="mt-4 md:mt-0 flex gap-4">
-            <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
-              <div className="w-2 h-2 rounded-full bg-[#10b981]"></div> System Ready
+          <div>
+            <h2 className="text-[10px] font-mono text-[#a1a1aa] mb-3 uppercase tracking-wider">Settings</h2>
+            <ul className="space-y-1">
+              <li>
+                <button className="w-full text-left px-2 py-1.5 rounded text-xs text-[#a1a1aa] hover:bg-[#201f21] hover:text-white transition-colors">Audio Interface</button>
+              </li>
+              <li>
+                <button className="w-full text-left px-2 py-1.5 rounded text-xs text-[#a1a1aa] hover:bg-[#201f21] hover:text-white transition-colors">Shortcuts</button>
+              </li>
+            </ul>
+          </div>
+        </nav>
+      </aside>
+
+      {/* MAIN STAGE */}
+      <div className="flex-1 flex flex-col h-screen overflow-y-auto p-8">
+        <div className="max-w-5xl mx-auto w-full space-y-6">
+          
+          <header className="flex flex-col md:flex-row md:items-center justify-between border-b border-[#27272a] pb-6 mb-8">
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight">Karaoke Studio</h1>
+              <p className="text-sm text-[#a1a1aa] mt-1">Browser-based multi-track recording environment</p>
             </div>
-          </div>
-        </header>
+            <div className="mt-4 md:mt-0 flex gap-4">
+              <div className="flex items-center gap-2 text-xs font-mono text-[#a1a1aa]">
+                <div className="w-2 h-2 rounded-full bg-[#10b981]"></div> System Ready
+              </div>
+            </div>
+          </header>
 
         <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
           
@@ -338,6 +375,7 @@ export default function KaraokeStudio() {
           </div>
         </div>
 
+        </div>
       </div>
     </div>
   );
