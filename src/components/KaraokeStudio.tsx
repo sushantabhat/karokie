@@ -59,6 +59,11 @@ export default function KaraokeStudio() {
   };
 
   const handleStartRecording = () => {
+    if (recordedBlob) {
+      const confirmRetake = window.confirm("Are you sure you want to overwrite your current vocal take?");
+      if (!confirmRetake) return;
+    }
+
     if (trackFile && !audioRef.current) {
       audioRef.current = new Audio(URL.createObjectURL(trackFile));
     }
