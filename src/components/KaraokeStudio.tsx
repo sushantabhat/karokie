@@ -5,7 +5,7 @@ import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, Chec
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 
-function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeek }: { buffer: AudioBuffer | null, color: string, duration: number, currentTime: number, totalDuration?: number, onSeek?: (time: number) => void }) {
+function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeek, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string, duration: number, currentTime: number, totalDuration?: number, onSeek?: (time: number) => void, emptyText?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   
   useEffect(() => {
@@ -48,25 +48,47 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
 
   const actualTotalDuration = totalDuration || duration;
   const progress = actualTotalDuration > 0 ? (currentTime / actualTotalDuration) * 100 : 0;
+  
+  const [isDragging, setIsDragging] = useState(false);
+  const containerRef = useRef<HTMLDivElement>(null);
 
-  const handleContainerClick = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (!onSeek || !buffer) return;
-    const rect = e.currentTarget.getBoundingClientRect();
-    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+  const calculateAndSeek = (clientX: number) => {
+    if (!onSeek || !containerRef.current) return;
+    const rect = containerRef.current.getBoundingClientRect();
+    const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     const percentage = x / rect.width;
     onSeek(percentage * actualTotalDuration);
   };
 
+  const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
+    setIsDragging(true);
+    calculateAndSeek(e.clientX);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
+    if (isDragging) {
+      calculateAndSeek(e.clientX);
+    }
+  };
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => setIsDragging(false);
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, []);
+
   return (
     <div 
+      ref={containerRef}
       className={`relative w-full h-full bg-[#121214] ${onSeek ? 'cursor-text' : ''}`}
-      onMouseDown={handleContainerClick}
+      onMouseDown={handleMouseDown}
+      onMouseMove={handleMouseMove}
     >
       {buffer ? (
         <canvas ref={canvasRef} className="w-full h-full opacity-50" />
       ) : (
         <div className="w-full h-full flex items-center justify-center">
-          <span className="text-[#424754] text-xs font-mono">No Audio Data</span>
+          <span className="text-[#424754] text-xs font-mono">{emptyText}</span>
         </div>
       )}
       <div 
@@ -79,18 +101,25 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
 
 export default function KaraokeStudio() {
   const [trackFile, setTrackFile] = useState<File | null>(null);
+  const [trackUrl, setTrackUrl] = useState<string | null>(null);
   const [headphonesConfirmed, setHeadphonesConfirmed] = useState(false);
   const [countdown, setCountdown] = useState<number | null>(null);
   
   const { 
-    isRecording, isPaused: isRecPaused, recordedBlob, 
-    startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, analyser 
+    isRecording, isPaused: isRecPaused, 
+    recordedBlob, startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, analyser 
   } = useAudioRecorder();
+
   const { 
-    loadTrack, loadVocal, playPreview, stopPreview, pausePreview, resumePreview, exportMix, 
+    loadTrack, loadVocal, mergeVocal, clearVocal, playPreview, stopPreview, pausePreview, resumePreview, exportMix,
     isPlaying, isPaused, isProcessing, setTrackVolumeLive, setVocalVolumeLive,
-    trackBuffer, vocalBuffer
+    trackBuffer, vocalBuffer 
   } = useAudioMixer();
+
+  const [currentTime, setCurrentTime] = useState(0);
+  const audioRef = useRef<HTMLAudioElement | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement>(null);
+  const punchInTimeRef = useRef<number>(0);
 
   const [mixSettings, setMixSettings] = useState<MixSettings>({
     trackVolume: 80,
@@ -99,9 +128,75 @@ export default function KaraokeStudio() {
     reverbEnabled: false,
   });
 
-  const canvasRef = useRef<HTMLCanvasElement>(null);
-  const audioRef = useRef<HTMLAudioElement | null>(null);
-  const [currentTime, setCurrentTime] = useState(0);
+  const updateSetting = (key: keyof MixSettings, value: any) => {
+    setMixSettings(prev => ({ ...prev, [key]: value }));
+  };
+
+  const handleTrackUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      setTrackFile(file);
+      const url = URL.createObjectURL(file);
+      setTrackUrl(url);
+      await loadTrack(file);
+    }
+  };
+
+  const formatTime = (seconds: number) => {
+    const m = Math.floor(seconds / 60);
+    const s = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 10);
+    return `${m}:${s.toString().padStart(2, '0')}.${ms}`;
+  };
+
+  const handleStartRecording = async () => {
+    if (!headphonesConfirmed) {
+      const confirmed = window.confirm("Please wear headphones to prevent audio feedback (echo) from your speakers. Click OK when you are ready.");
+      if (!confirmed) return;
+      setHeadphonesConfirmed(true);
+    }
+
+    if (vocalBuffer) {
+      const continueTake = window.confirm("Click OK to seamlessly continue recording from the exact end of your last take.\n\nClick Cancel to wipe the track and start a fresh take from the beginning.");
+      if (continueTake) {
+        punchInTimeRef.current = vocalBuffer.duration;
+        setCurrentTime(vocalBuffer.duration);
+      } else {
+        clearVocal();
+        punchInTimeRef.current = 0;
+        setCurrentTime(0);
+      }
+    } else {
+      punchInTimeRef.current = currentTime;
+    }
+
+    stopPreview();
+    resetRecording();
+    await startRecording();
+    
+    if (audioRef.current) {
+      audioRef.current.volume = Math.min(mixSettings.trackVolume / 100, 1);
+      audioRef.current.currentTime = punchInTimeRef.current;
+      audioRef.current.play();
+    }
+  };
+
+  const handleStopRecording = () => {
+    stopRecording();
+    if (audioRef.current) {
+      audioRef.current.pause();
+    }
+  };
+
+  const handlePauseResumeRecording = () => {
+    if (isRecPaused) {
+      resumeRecording();
+      if (audioRef.current) audioRef.current.play();
+    } else {
+      pauseRecording();
+      if (audioRef.current) audioRef.current.pause();
+    }
+  };
 
   // Time tracker for UI
   useEffect(() => {
@@ -174,84 +269,16 @@ export default function KaraokeStudio() {
     if (!isRecording && !isPlaying) setCurrentTime(0);
   }, [isRecording, isPlaying]);
 
-  const handleTrackUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setTrackFile(file);
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current = null;
-      }
-      setHeadphonesConfirmed(false);
-      await loadTrack(file);
-    }
-  };
-
-  const handleStartRecording = () => {
-    if (recordedBlob) {
-      const confirmRetake = window.confirm("Are you sure you want to overwrite your current vocal take?");
-      if (!confirmRetake) return;
-    }
-
-    if (trackFile && !audioRef.current) {
-      const audio = new Audio(URL.createObjectURL(trackFile));
-      audio.onended = () => {
-        handleStopRecording();
-      };
-      audioRef.current = audio;
-    }
-    
-    if (audioRef.current) {
-      audioRef.current.muted = true;
-      audioRef.current.play().then(() => {
-        audioRef.current?.pause();
-        if (audioRef.current) {
-          audioRef.current.currentTime = 0;
-          audioRef.current.muted = false;
-        }
-      }).catch(e => console.error("Audio unlock failed", e));
-    }
-
-    setCountdown(3);
-  };
-
-  const handlePauseResumeRecording = () => {
-    if (isRecPaused) {
-      resumeRecording();
-      if (audioRef.current) audioRef.current.play();
-    } else {
-      pauseRecording();
-      if (audioRef.current) audioRef.current.pause();
-    }
-  };
-
-  useEffect(() => {
-    if (countdown === null) return;
-    if (countdown > 0) {
-      const timer = setTimeout(() => setCountdown(countdown - 1), 1000);
-      return () => clearTimeout(timer);
-    } else {
-      setCountdown(null);
-      startRecording();
-      if (audioRef.current) {
-        audioRef.current.play();
-      }
-    }
-  }, [countdown, startRecording]);
-
-  const handleStopRecording = () => {
-    stopRecording();
-    if (audioRef.current) {
-      audioRef.current.pause();
-      audioRef.current.currentTime = 0;
-    }
-  };
 
   useEffect(() => {
     if (recordedBlob) {
-      loadVocal(recordedBlob);
+      if (punchInTimeRef.current > 0 && vocalBuffer) {
+        mergeVocal(recordedBlob, punchInTimeRef.current);
+      } else {
+        loadVocal(recordedBlob);
+      }
     }
-  }, [recordedBlob, loadVocal]);
+  }, [recordedBlob, loadVocal, mergeVocal, vocalBuffer]);
 
   const [trackMuted, setTrackMuted] = useState(false);
   const [trackSolo, setTrackSolo] = useState(false);
@@ -335,16 +362,8 @@ export default function KaraokeStudio() {
     }
   };
 
-  const updateSetting = <K extends keyof MixSettings>(key: K, value: MixSettings[K]) => {
-    setMixSettings(prev => ({ ...prev, [key]: value }));
-  };
 
-  const formatTime = (time: number) => {
-    const m = Math.floor(time / 60);
-    const s = Math.floor(time % 60);
-    const ms = Math.floor((time % 1) * 10);
-    return `${m}:${s.toString().padStart(2, '0')}.${ms}`;
-  };
+
 
   return (
     <div className="min-h-screen bg-[#131315] text-[#fafafa] font-sans flex overflow-hidden">
@@ -399,7 +418,7 @@ export default function KaraokeStudio() {
               {/* Record Button */}
               <button 
                 onClick={handleStartRecording}
-                disabled={isRecording || isPlaying || !trackFile || !headphonesConfirmed}
+                disabled={isRecording || isPlaying || !trackFile}
                 className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                   isRecording 
                     ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.6)] animate-pulse' 
@@ -545,11 +564,6 @@ export default function KaraokeStudio() {
                     </button>
                   </div>
                 </div>
-                {!headphonesConfirmed && trackFile && (
-                  <button onClick={() => setHeadphonesConfirmed(true)} className="text-[10px] bg-[#f59e0b] text-black px-2 py-0.5 rounded font-bold mt-1">
-                    Confirm Headphones
-                  </button>
-                )}
               </div>
               
               <div className="flex items-center gap-2">
@@ -585,9 +599,15 @@ export default function KaraokeStudio() {
                   onSeek={handleSeek}
                 />
               ) : (
-                <div className="absolute inset-0 flex items-center justify-center border-t border-dashed border-[#27272a]">
-                  <span className="text-[#424754] text-xs font-mono">No Vocal Data</span>
-                </div>
+                <StaticWaveform 
+                  buffer={null} 
+                  color="#fca5a5" 
+                  duration={0} 
+                  currentTime={currentTime}
+                  totalDuration={trackBuffer?.duration}
+                  onSeek={handleSeek}
+                  emptyText="No Vocal Data"
+                />
               )}
             </div>
           </div>
@@ -606,6 +626,9 @@ export default function KaraokeStudio() {
                 />
                 <span className="text-xs font-mono text-[#a1a1aa] w-12 text-right">{mixSettings.latencyOffsetMs}ms</span>
               </div>
+              <span className="text-xs font-medium text-[#a1a1aa] mt-2 block">
+                Nudge timing to fix bluetooth delay
+              </span>
             </div>
             
             <div className="flex-1 max-w-sm border-l border-[#27272a] pl-8">
@@ -621,9 +644,21 @@ export default function KaraokeStudio() {
               </div>
             </div>
           </div>
-
         </div>
       </div>
+      
+      {/* Hidden audio element for synchronized playback DURING recording */}
+      {trackUrl && (
+        <audio 
+          ref={audioRef} 
+          src={trackUrl} 
+          onEnded={() => {
+            if (isRecording) {
+              handleStopRecording();
+            }
+          }}
+        />
+      )}
     </div>
   );
 }

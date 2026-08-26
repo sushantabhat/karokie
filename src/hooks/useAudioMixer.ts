@@ -78,6 +78,55 @@ export function useAudioMixer() {
     return audioBuffer;
   }, []);
 
+  const mergeVocal = useCallback(async (newBlob: Blob, offsetTime: number) => {
+    if (!audioContextRef.current) return null;
+    const arrayBuffer = await newBlob.arrayBuffer();
+    const newAudioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+    const ctx = audioContextRef.current;
+    
+    if (!vocalBufferRef.current) {
+      const totalDuration = offsetTime + newAudioBuffer.duration;
+      const mergedBuffer = ctx.createBuffer(newAudioBuffer.numberOfChannels, totalDuration * newAudioBuffer.sampleRate, newAudioBuffer.sampleRate);
+      for (let channel = 0; channel < newAudioBuffer.numberOfChannels; channel++) {
+        const offsetSamples = Math.floor(offsetTime * newAudioBuffer.sampleRate);
+        mergedBuffer.getChannelData(channel).set(newAudioBuffer.getChannelData(channel), offsetSamples);
+      }
+      vocalBufferRef.current = mergedBuffer;
+      setVocalBuffer(mergedBuffer);
+      return mergedBuffer;
+    }
+
+    const oldBuffer = vocalBufferRef.current;
+    const totalDuration = Math.max(oldBuffer.duration, offsetTime + newAudioBuffer.duration);
+    const numberOfChannels = Math.max(oldBuffer.numberOfChannels, newAudioBuffer.numberOfChannels);
+    const mergedBuffer = ctx.createBuffer(numberOfChannels, totalDuration * oldBuffer.sampleRate, oldBuffer.sampleRate);
+
+    for (let channel = 0; channel < numberOfChannels; channel++) {
+      const channelData = mergedBuffer.getChannelData(channel);
+      if (channel < oldBuffer.numberOfChannels) {
+        channelData.set(oldBuffer.getChannelData(channel), 0);
+      }
+      if (channel < newAudioBuffer.numberOfChannels) {
+        const offsetSamples = Math.floor(offsetTime * oldBuffer.sampleRate);
+        const newData = newAudioBuffer.getChannelData(channel);
+        for (let i = 0; i < newData.length; i++) {
+          if (offsetSamples + i < channelData.length) {
+            channelData[offsetSamples + i] = newData[i];
+          }
+        }
+      }
+    }
+    
+    vocalBufferRef.current = mergedBuffer;
+    setVocalBuffer(mergedBuffer);
+    return mergedBuffer;
+  }, []);
+
+  const clearVocal = useCallback(() => {
+    vocalBufferRef.current = null;
+    setVocalBuffer(null);
+  }, []);
+
   const stopPreview = useCallback(() => {
     if (trackSourceRef.current) {
       try { trackSourceRef.current.stop(); } catch (e) {}
@@ -92,14 +141,14 @@ export function useAudioMixer() {
     setIsPaused(false);
   }, []);
 
-  const playPreview = useCallback(async (settings: MixSettings, startOffset: number = 0) => {
+  const playPreview = useCallback((settings: MixSettings, startOffset: number = 0) => {
     if (!audioContextRef.current || !trackBufferRef.current) return;
     
     stopPreview(); // Stop existing
 
     const ctx = audioContextRef.current;
     if (ctx.state === 'suspended') {
-      await ctx.resume();
+      ctx.resume(); // Do not await to prevent race conditions during rapid scrubbing
     }
     
     // Track setup
@@ -273,6 +322,8 @@ export function useAudioMixer() {
   return {
     loadTrack,
     loadVocal,
+    mergeVocal,
+    clearVocal,
     playPreview,
     stopPreview,
     pausePreview,
