@@ -5,8 +5,10 @@ import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, Chec
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 
-function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeek, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string, duration: number, currentTime: number, totalDuration?: number, onSeek?: (time: number) => void, emptyText?: string }) {
+function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeekStart, onSeekDrag, onSeekEnd, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string, duration: number, currentTime: number, totalDuration?: number, onSeekStart?: (time: number) => void, onSeekDrag?: (time: number) => void, onSeekEnd?: (time: number) => void, emptyText?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const isDragging = useRef(false);
   
   useEffect(() => {
     if (!canvasRef.current || !buffer) return;
@@ -19,8 +21,6 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
     ctx.clearRect(0, 0, canvas.width, canvas.height);
     
     const data = buffer.getChannelData(0);
-    
-    // Calculate how much width this buffer should actually take up
     const actualTotalDuration = totalDuration || buffer.duration;
     const widthProportion = Math.min(buffer.duration / actualTotalDuration, 1.0);
     const targetWidth = canvas.width * widthProportion;
@@ -30,70 +30,74 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
     
     ctx.fillStyle = color;
     for (let i = 0; i < targetWidth; i++) {
-      let min = 1.0;
-      let max = -1.0;
+      let sum = 0;
       for (let j = 0; j < step; j++) {
         const index = (i * step) + j;
         if (index < data.length) {
-          const datum = data[index];
-          if (datum < min) min = datum;
-          if (datum > max) max = datum;
+          sum += Math.abs(data[index]);
         }
       }
-      const y = (1 + min) * amp;
-      const height = Math.max(1, (max - min) * amp);
+      
+      const average = sum / step;
+      // Multiply by a factor to make the waveform look full but dynamic
+      const scaledHeight = Math.min(1.0, average * 3.5) * canvas.height;
+      const height = Math.max(1, scaledHeight);
+      const y = (canvas.height - height) / 2;
+      
       ctx.fillRect(i, y, 1, height);
     }
   }, [buffer, color, totalDuration]);
 
   const actualTotalDuration = totalDuration || duration;
   const progress = actualTotalDuration > 0 ? (currentTime / actualTotalDuration) * 100 : 0;
-  
-  const [isDragging, setIsDragging] = useState(false);
-  const containerRef = useRef<HTMLDivElement>(null);
 
-  const calculateAndSeek = (clientX: number) => {
-    if (!onSeek || !containerRef.current) return;
+  const calculateSeekTime = (clientX: number) => {
+    if (!containerRef.current) return 0;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(clientX - rect.left, rect.width));
     const percentage = x / rect.width;
-    onSeek(percentage * actualTotalDuration);
+    return percentage * actualTotalDuration;
   };
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
-    setIsDragging(true);
-    calculateAndSeek(e.clientX);
+    isDragging.current = true;
+    if (onSeekStart) onSeekStart(calculateSeekTime(e.clientX));
   };
 
   const handleMouseMove = (e: React.MouseEvent<HTMLDivElement>) => {
-    if (isDragging) {
-      calculateAndSeek(e.clientX);
+    if (isDragging.current && onSeekDrag) {
+      onSeekDrag(calculateSeekTime(e.clientX));
     }
   };
 
   useEffect(() => {
-    const handleGlobalMouseUp = () => setIsDragging(false);
+    const handleGlobalMouseUp = (e: MouseEvent) => {
+      if (isDragging.current) {
+        isDragging.current = false;
+        if (onSeekEnd) onSeekEnd(calculateSeekTime(e.clientX));
+      }
+    };
     window.addEventListener('mouseup', handleGlobalMouseUp);
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
-  }, []);
+  }, [onSeekEnd, actualTotalDuration]);
 
   return (
     <div 
       ref={containerRef}
-      className={`relative w-full h-full bg-[#121214] ${onSeek ? 'cursor-text' : ''}`}
+      className={`relative w-full h-full bg-[#121214] ${onSeekStart ? 'cursor-pointer select-none' : ''}`}
       onMouseDown={handleMouseDown}
       onMouseMove={handleMouseMove}
     >
       {buffer ? (
-        <canvas ref={canvasRef} className="w-full h-full opacity-50" />
+        <canvas ref={canvasRef} className="w-full h-full opacity-50 pointer-events-none" />
       ) : (
-        <div className="w-full h-full flex items-center justify-center">
+        <div className="w-full h-full flex items-center justify-center pointer-events-none">
           <span className="text-[#424754] text-xs font-mono">{emptyText}</span>
         </div>
       )}
       <div 
         className="absolute top-0 bottom-0 w-[2px] bg-[#3b82f6] z-10 shadow-[0_0_8px_rgba(59,130,246,0.8)] pointer-events-none"
-        style={{ left: `${Math.min(progress, 100)}%`, transition: 'left 0.1s linear' }}
+        style={{ left: `${Math.min(progress, 100)}%`, transition: isDragging.current ? 'none' : 'left 0.1s linear' }}
       />
     </div>
   );
@@ -111,8 +115,8 @@ export default function KaraokeStudio() {
   } = useAudioRecorder();
 
   const { 
-    loadTrack, loadVocal, mergeVocal, clearVocal, playPreview, stopPreview, pausePreview, resumePreview, exportMix,
-    isPlaying, isPaused, isProcessing, setTrackVolumeLive, setVocalVolumeLive,
+    loadTrack, loadVocal, mergeVocal, clearVocal, playPreview, stopPreview, exportMix,
+    isPlaying, isProcessing, setTrackVolumeLive, setVocalVolumeLive,
     trackBuffer, vocalBuffer 
   } = useAudioMixer();
 
@@ -205,13 +209,13 @@ export default function KaraokeStudio() {
       interval = setInterval(() => {
         if (audioRef.current) setCurrentTime(audioRef.current.currentTime);
       }, 100);
-    } else if (isPlaying && !isPaused) {
+    } else if (isPlaying) {
       interval = setInterval(() => {
         setCurrentTime(prev => prev + 0.1);
       }, 100);
     }
     return () => clearInterval(interval);
-  }, [isRecording, isRecPaused, isPlaying, isPaused]);
+  }, [isRecording, isRecPaused, isPlaying]);
 
   // Visualizer loop
   useEffect(() => {
@@ -281,37 +285,49 @@ export default function KaraokeStudio() {
   }, [recordedBlob, loadVocal, mergeVocal, vocalBuffer]);
 
   const [trackMuted, setTrackMuted] = useState(false);
-  const [trackSolo, setTrackSolo] = useState(false);
   const [vocalMuted, setVocalMuted] = useState(false);
-  const [vocalSolo, setVocalSolo] = useState(false);
 
-  const effectiveTrackVolume = trackMuted || (vocalSolo && !trackSolo) ? 0 : mixSettings.trackVolume;
-  const effectiveVocalVolume = vocalMuted || (trackSolo && !vocalSolo) ? 0 : mixSettings.vocalVolume;
+  const effectiveTrackVolume = trackMuted ? 0 : mixSettings.trackVolume;
+  const effectiveVocalVolume = vocalMuted ? 0 : mixSettings.vocalVolume;
 
-  // Apply live volume changes when Mute/Solo state changes
+  // Apply live volume changes when Mute state changes
   useEffect(() => {
     if (isPlaying) {
       setTrackVolumeLive(effectiveTrackVolume);
       setVocalVolumeLive(effectiveVocalVolume);
     }
-  }, [trackMuted, trackSolo, vocalMuted, vocalSolo, isPlaying, effectiveTrackVolume, effectiveVocalVolume, setTrackVolumeLive, setVocalVolumeLive]);
+  }, [trackMuted, vocalMuted, isPlaying, effectiveTrackVolume, effectiveVocalVolume, setTrackVolumeLive, setVocalVolumeLive]);
 
-  const handleSeek = (time: number) => {
-    if (isRecording) return; // Disallow seeking while actively recording
+  const masterDuration = Math.max(trackBuffer?.duration || 0, vocalBuffer?.duration || 0);
+
+  const wasPlayingBeforeDrag = useRef(false);
+
+  const handleSeekStart = (time: number) => {
+    if (isRecording) return;
     setCurrentTime(time);
     
+    wasPlayingBeforeDrag.current = isPlaying;
     if (isPlaying) {
-      if (!isPaused) {
-        // If currently playing, we restart playPreview from the new time
-        playPreview({
-          ...mixSettings,
-          trackVolume: effectiveTrackVolume,
-          vocalVolume: effectiveVocalVolume
-        }, time);
-      } else {
-        // If paused, stop the underlying audio so the next play click starts from the new seek time
-        stopPreview();
-      }
+      stopPreview(); // Stop audio immediately so dragging is silent and safe
+    }
+  };
+
+  const handleSeekDrag = (time: number) => {
+    if (isRecording) return;
+    setCurrentTime(time);
+  };
+
+  const handleSeekEnd = (time: number) => {
+    if (isRecording) return;
+    setCurrentTime(time);
+    
+    if (wasPlayingBeforeDrag.current) {
+      // Restart playback from new time
+      playPreview({
+        ...mixSettings,
+        trackVolume: effectiveTrackVolume,
+        vocalVolume: effectiveVocalVolume
+      }, time);
     }
   };
 
@@ -356,7 +372,7 @@ export default function KaraokeStudio() {
     if (isRecording) {
       handlePauseResumeRecording();
     } else if (isPlaying) {
-      isPaused ? resumePreview() : pausePreview();
+      stopPreview();
     } else {
       handlePlayPreviewClick();
     }
@@ -408,12 +424,9 @@ export default function KaraokeStudio() {
         {/* TRANSPORT HEADER */}
         <header className="h-16 flex items-center justify-between border-b border-[#27272a] bg-[#1b1b1d] px-6">
           <div className="flex items-center gap-6">
-            <div className="text-3xl font-mono tracking-tight text-[#3b82f6] w-32">
-              {formatTime(currentTime)}
-            </div>
             
             {/* Unified Transport Controls */}
-            <div className="flex items-center gap-3 border-l border-[#27272a] pl-6">
+            <div className="flex items-center gap-3">
               
               {/* Record Button */}
               <button 
@@ -439,23 +452,6 @@ export default function KaraokeStudio() {
                 <Square className="w-4 h-4 fill-current" />
               </button>
 
-              {/* Play/Pause Button */}
-              <button 
-                onClick={handlePlayPauseClick}
-                disabled={!isRecording && !recordedBlob && !trackBuffer}
-                className={`w-10 h-10 rounded flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none ${
-                  (isPlaying && !isPaused) || (isRecording && !isRecPaused)
-                    ? 'bg-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
-                    : 'bg-[#121214] border border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white'
-                }`}
-                title="Play / Pause"
-              >
-                {(isPlaying && !isPaused) || (isRecording && !isRecPaused) 
-                  ? <Pause className="w-4 h-4 fill-current" /> 
-                  : <Play className="w-4 h-4 fill-current ml-1" />
-                }
-              </button>
-
             </div>
           </div>
 
@@ -477,21 +473,31 @@ export default function KaraokeStudio() {
           {/* TRACK 1: BACKING TRACK */}
           <div className="flex h-32 border border-[#27272a] bg-[#1b1b1d] rounded overflow-hidden">
             <div className="w-64 p-4 flex flex-col justify-between border-r border-[#27272a] shrink-0">
-              <div>
+              <div className="flex-1">
                 <div className="flex justify-between items-start mb-1">
-                  <span className="font-bold text-xs text-white truncate pr-2">Track 1: Backing Track</span>
-                  <div className="flex gap-1">
+                  <div className="flex items-center gap-2 overflow-hidden pr-2">
+                    <span className="font-bold text-xs text-white truncate">Track 1: Backing Track</span>
+                    {trackBuffer && <span className="text-[10px] font-mono text-[#3b82f6] bg-[#121214] px-1.5 py-0.5 rounded whitespace-nowrap">{formatTime(currentTime)} / {formatTime(trackBuffer.duration)}</span>}
+                  </div>
+                  <div className="flex gap-1 shrink-0">
+                    {trackBuffer && (
+                      <button 
+                        onClick={handlePlayPauseClick} 
+                        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                          (isPlaying) || (isRecording && !isRecPaused)
+                            ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                            : 'bg-[#121214] border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white'
+                        }`}
+                        title="Play/Pause Mix"
+                      >
+                        {(isPlaying) || (isRecording && !isRecPaused) ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current ml-0.5" />}
+                      </button>
+                    )}
                     <button 
                       onClick={() => setTrackMuted(!trackMuted)}
                       className={`w-5 h-5 rounded border text-[10px] font-bold transition-colors ${trackMuted ? 'bg-[#3b82f6] border-[#3b82f6] text-white' : 'bg-[#121214] border-[#424754] text-[#a1a1aa] hover:border-[#3b82f6]'}`}
                     >
                       M
-                    </button>
-                    <button 
-                      onClick={() => setTrackSolo(!trackSolo)}
-                      className={`w-5 h-5 rounded border text-[10px] font-bold transition-colors ${trackSolo ? 'bg-[#f59e0b] border-[#f59e0b] text-black' : 'bg-[#121214] border-[#424754] text-[#a1a1aa] hover:border-[#f59e0b]'}`}
-                    >
-                      S
                     </button>
                   </div>
                 </div>
@@ -499,32 +505,33 @@ export default function KaraokeStudio() {
               </div>
               
               <div className="flex items-center gap-2">
-                <Volume2 className={`w-3 h-3 ${trackMuted || (vocalSolo && !trackSolo) ? 'text-[#424754]' : 'text-[#a1a1aa]'}`} />
+                <Volume2 className={`w-3 h-3 ${trackMuted ? 'text-[#424754]' : 'text-[#a1a1aa]'}`} />
                 <input 
                   type="range" min="0" max="200" 
                   value={mixSettings.trackVolume}
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     updateSetting('trackVolume', val);
-                    if (isPlaying && !trackMuted && (!vocalSolo || trackSolo)) {
+                    if (isPlaying && !trackMuted) {
                       setTrackVolumeLive(val);
                     }
                     if (audioRef.current) audioRef.current.volume = Math.min(val / 100, 1);
                   }}
-                  className={`flex-1 h-1 rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-sm transition-opacity ${trackMuted || (vocalSolo && !trackSolo) ? 'bg-[#121214] opacity-50 [&::-webkit-slider-thumb]:bg-[#424754]' : 'bg-[#121214] [&::-webkit-slider-thumb]:bg-[#3b82f6]'}`}
+                  className={`flex-1 h-1 rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-sm transition-opacity ${trackMuted ? 'bg-[#121214] opacity-50 [&::-webkit-slider-thumb]:bg-[#424754]' : 'bg-[#121214] [&::-webkit-slider-thumb]:bg-[#3b82f6]'}`}
                 />
-                <span className={`text-[10px] font-mono w-6 text-right ${trackMuted || (vocalSolo && !trackSolo) ? 'text-[#424754]' : 'text-[#a1a1aa]'}`}>{mixSettings.trackVolume}</span>
+                <span className={`text-[10px] font-mono w-6 text-right ${trackMuted ? 'text-[#424754]' : 'text-[#a1a1aa]'}`}>{mixSettings.trackVolume}</span>
               </div>
             </div>
             
-            <div className={`flex-1 relative bg-[#121214] transition-opacity ${trackMuted || (vocalSolo && !trackSolo) ? 'opacity-30' : 'opacity-100'}`}>
+            <div className={`flex-1 relative bg-[#121214] transition-opacity ${trackMuted ? 'opacity-30' : 'opacity-100'}`}>
               {trackBuffer ? (
                 <StaticWaveform 
                   buffer={trackBuffer} 
                   color="#4b5563" 
                   duration={trackBuffer.duration} 
                   currentTime={currentTime} 
-                  onSeek={handleSeek}
+                  totalDuration={masterDuration}
+                  onSeekStart={handleSeekStart} onSeekDrag={handleSeekDrag} onSeekEnd={handleSeekEnd}
                 />
               ) : (
                 <div className="absolute inset-0 flex items-center justify-center">
@@ -543,48 +550,56 @@ export default function KaraokeStudio() {
           {/* TRACK 2: VOCALS */}
           <div className="flex h-32 border border-[#27272a] bg-[#1b1b1d] rounded overflow-hidden">
             <div className="w-64 p-4 flex flex-col justify-between border-r border-[#27272a] shrink-0">
-              <div>
+              <div className="flex-1">
                 <div className="flex justify-between items-start mb-1">
-                  <div className="flex items-center gap-2">
-                    <div className={`w-2 h-2 rounded-full ${isRecording ? 'bg-[#ef4444] animate-pulse' : 'bg-[#424754]'}`} />
+                  <div className="flex items-center gap-2 overflow-hidden pr-2">
+                    <div className={`w-1.5 h-1.5 rounded-full shrink-0 ${isRecording ? 'bg-[#ef4444] animate-pulse shadow-[0_0_8px_rgba(239,68,68,0.8)]' : 'bg-[#424754]'}`} />
                     <span className="font-bold text-xs text-white truncate">Track 2: Your Vocals</span>
+                    {vocalBuffer && <span className="text-[10px] font-mono text-[#ef4444] bg-[#121214] px-1.5 py-0.5 rounded whitespace-nowrap">{formatTime(currentTime)} / {formatTime(vocalBuffer.duration)}</span>}
                   </div>
-                  <div className="flex gap-1">
+                  <div className="flex gap-1 shrink-0">
+                    {vocalBuffer && (
+                      <button 
+                        onClick={handlePlayPauseClick} 
+                        className={`w-5 h-5 rounded border flex items-center justify-center transition-colors ${
+                          (isPlaying) || (isRecording && !isRecPaused)
+                            ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_8px_rgba(16,185,129,0.4)]'
+                            : 'bg-[#121214] border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white'
+                        }`}
+                        title="Play/Pause Mix"
+                      >
+                        {(isPlaying) || (isRecording && !isRecPaused) ? <Pause className="w-2.5 h-2.5 fill-current" /> : <Play className="w-2.5 h-2.5 fill-current ml-0.5" />}
+                      </button>
+                    )}
                     <button 
                       onClick={() => setVocalMuted(!vocalMuted)}
                       className={`w-5 h-5 rounded border text-[10px] font-bold transition-colors ${vocalMuted ? 'bg-[#3b82f6] border-[#3b82f6] text-white' : 'bg-[#121214] border-[#424754] text-[#a1a1aa] hover:border-[#3b82f6]'}`}
                     >
                       M
                     </button>
-                    <button 
-                      onClick={() => setVocalSolo(!vocalSolo)}
-                      className={`w-5 h-5 rounded border text-[10px] font-bold transition-colors ${vocalSolo ? 'bg-[#f59e0b] border-[#f59e0b] text-black' : 'bg-[#121214] border-[#424754] text-[#a1a1aa] hover:border-[#f59e0b]'}`}
-                    >
-                      S
-                    </button>
                   </div>
                 </div>
               </div>
               
               <div className="flex items-center gap-2">
-                <Mic2 className={`w-3 h-3 ${vocalMuted || (trackSolo && !vocalSolo) ? 'text-[#424754]' : 'text-[#a1a1aa]'}`} />
+                <Mic2 className={`w-3 h-3 ${vocalMuted ? 'text-[#424754]' : 'text-[#a1a1aa]'}`} />
                 <input 
                   type="range" min="0" max="200" 
                   value={mixSettings.vocalVolume}
                   onChange={(e) => {
                     const val = Number(e.target.value);
                     updateSetting('vocalVolume', val);
-                    if (isPlaying && !vocalMuted && (!trackSolo || vocalSolo)) {
+                    if (isPlaying && !vocalMuted) {
                       setVocalVolumeLive(val);
                     }
                   }}
-                  className={`flex-1 h-1 rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-sm transition-opacity ${vocalMuted || (trackSolo && !vocalSolo) ? 'bg-[#121214] opacity-50 [&::-webkit-slider-thumb]:bg-[#424754]' : 'bg-[#121214] [&::-webkit-slider-thumb]:bg-[#ef4444]'}`}
+                  className={`flex-1 h-1 rounded outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-sm transition-opacity ${vocalMuted ? 'bg-[#121214] opacity-50 [&::-webkit-slider-thumb]:bg-[#424754]' : 'bg-[#121214] [&::-webkit-slider-thumb]:bg-[#ef4444]'}`}
                 />
-                <span className={`text-[10px] font-mono w-6 text-right ${vocalMuted || (trackSolo && !vocalSolo) ? 'text-[#424754]' : 'text-[#a1a1aa]'}`}>{mixSettings.vocalVolume}</span>
+                <span className={`text-[10px] font-mono w-6 text-right ${vocalMuted ? 'text-[#424754]' : 'text-[#a1a1aa]'}`}>{mixSettings.vocalVolume}</span>
               </div>
             </div>
             
-            <div className={`flex-1 relative bg-[#121214] transition-opacity ${vocalMuted || (trackSolo && !vocalSolo) ? 'opacity-30' : 'opacity-100'}`}>
+            <div className={`flex-1 relative bg-[#121214] transition-opacity ${vocalMuted ? 'opacity-30' : 'opacity-100'}`}>
               {isRecording ? (
                 <div className="absolute inset-0">
                   <canvas ref={canvasRef} className="w-full h-full" />
@@ -595,8 +610,8 @@ export default function KaraokeStudio() {
                   color="#fca5a5" 
                   duration={vocalBuffer.duration} 
                   currentTime={currentTime}
-                  totalDuration={trackBuffer?.duration || vocalBuffer.duration}
-                  onSeek={handleSeek}
+                  totalDuration={masterDuration}
+                  onSeekStart={handleSeekStart} onSeekDrag={handleSeekDrag} onSeekEnd={handleSeekEnd}
                 />
               ) : (
                 <StaticWaveform 
@@ -604,8 +619,8 @@ export default function KaraokeStudio() {
                   color="#fca5a5" 
                   duration={0} 
                   currentTime={currentTime}
-                  totalDuration={trackBuffer?.duration}
-                  onSeek={handleSeek}
+                  totalDuration={masterDuration}
+                  onSeekStart={handleSeekStart} onSeekDrag={handleSeekDrag} onSeekEnd={handleSeekEnd}
                   emptyText="No Vocal Data"
                 />
               )}

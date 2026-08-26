@@ -12,7 +12,6 @@ export interface MixSettings {
 
 export function useAudioMixer() {
   const [isPlaying, setIsPlaying] = useState(false);
-  const [isPaused, setIsPaused] = useState(false);
   const audioContextRef = useRef<AudioContext | null>(null);
   
   // Buffers
@@ -129,6 +128,7 @@ export function useAudioMixer() {
 
   const stopPreview = useCallback(() => {
     if (trackSourceRef.current) {
+      trackSourceRef.current.onended = null;
       try { trackSourceRef.current.stop(); } catch (e) {}
     }
     if (vocalSourceRef.current) {
@@ -138,7 +138,6 @@ export function useAudioMixer() {
       audioContextRef.current.resume();
     }
     setIsPlaying(false);
-    setIsPaused(false);
   }, []);
 
   const playPreview = useCallback((settings: MixSettings, startOffset: number = 0) => {
@@ -227,20 +226,6 @@ export function useAudioMixer() {
     trackSourceRef.current.onended = () => setIsPlaying(false);
   }, [stopPreview]);
 
-  const pausePreview = useCallback(() => {
-    if (audioContextRef.current && isPlaying) {
-      audioContextRef.current.suspend();
-      setIsPaused(true);
-    }
-  }, [isPlaying]);
-
-  const resumePreview = useCallback(() => {
-    if (audioContextRef.current && isPaused) {
-      audioContextRef.current.resume();
-      setIsPaused(false);
-    }
-  }, [isPaused]);
-
   // Real-time volume updates
   const setTrackVolumeLive = useCallback((volume: number) => {
     if (trackGainRef.current && audioContextRef.current) {
@@ -261,8 +246,16 @@ export function useAudioMixer() {
     try {
       const sampleRate = trackBufferRef.current.sampleRate;
       
+      const trackDuration = trackBufferRef.current.duration;
       const vocalDuration = vocalBufferRef.current.duration;
-      const lengthSeconds = vocalDuration + (settings.latencyOffsetMs > 0 ? settings.latencyOffsetMs / 1000 : 0);
+      const offsetSeconds = settings.latencyOffsetMs / 1000;
+      
+      let lengthSeconds = 0;
+      if (offsetSeconds >= 0) {
+        lengthSeconds = Math.max(trackDuration, offsetSeconds + vocalDuration);
+      } else {
+        lengthSeconds = Math.max(vocalDuration, Math.abs(offsetSeconds) + trackDuration);
+      }
       
       const offlineCtx = new OfflineAudioContext(
         2, 
@@ -299,7 +292,6 @@ export function useAudioMixer() {
       }
       vocalGain.connect(offlineCtx.destination);
 
-      const offsetSeconds = settings.latencyOffsetMs / 1000;
       if (offsetSeconds >= 0) {
         trackSource.start(0);
         vocalSource.start(offsetSeconds);
@@ -326,11 +318,8 @@ export function useAudioMixer() {
     clearVocal,
     playPreview,
     stopPreview,
-    pausePreview,
-    resumePreview,
     exportMix,
     isPlaying,
-    isPaused,
     isProcessing,
     setTrackVolumeLive,
     setVocalVolumeLive,
