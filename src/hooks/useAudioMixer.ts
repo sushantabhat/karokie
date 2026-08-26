@@ -1,0 +1,228 @@
+'use client';
+
+import { useState, useRef, useCallback, useEffect } from 'react';
+import { audioBufferToWav } from '@/utils/audioBufferToWav';
+
+export interface MixSettings {
+  trackVolume: number;
+  vocalVolume: number;
+  latencyOffsetMs: number;
+  reverbEnabled: boolean;
+}
+
+export function useAudioMixer() {
+  const [isPlaying, setIsPlaying] = useState(false);
+  const audioContextRef = useRef<AudioContext | null>(null);
+  
+  // Buffers
+  const trackBufferRef = useRef<AudioBuffer | null>(null);
+  const vocalBufferRef = useRef<AudioBuffer | null>(null);
+  const reverbBufferRef = useRef<AudioBuffer | null>(null);
+
+  // Nodes for live playback
+  const trackSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const vocalSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const trackGainRef = useRef<GainNode | null>(null);
+  const vocalGainRef = useRef<GainNode | null>(null);
+  
+  const [isProcessing, setIsProcessing] = useState(false);
+
+  // Initialize AudioContext
+  useEffect(() => {
+    audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
+    
+    // Generate a simple impulse response for reverb
+    const generateReverb = async () => {
+      if (!audioContextRef.current) return;
+      const sampleRate = audioContextRef.current.sampleRate;
+      const length = sampleRate * 2; // 2 seconds reverb
+      const impulse = audioContextRef.current.createBuffer(2, length, sampleRate);
+      const impulseL = impulse.getChannelData(0);
+      const impulseR = impulse.getChannelData(1);
+      
+      for (let i = 0; i < length; i++) {
+        const decay = Math.exp(-i / (sampleRate * 0.5));
+        impulseL[i] = (Math.random() * 2 - 1) * decay;
+        impulseR[i] = (Math.random() * 2 - 1) * decay;
+      }
+      reverbBufferRef.current = impulse;
+    };
+    
+    generateReverb();
+
+    return () => {
+      if (audioContextRef.current?.state !== 'closed') {
+        audioContextRef.current?.close();
+      }
+    };
+  }, []);
+
+  const loadTrack = useCallback(async (file: File) => {
+    if (!audioContextRef.current) return null;
+    const arrayBuffer = await file.arrayBuffer();
+    const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+    trackBufferRef.current = audioBuffer;
+    return audioBuffer;
+  }, []);
+
+  const loadVocal = useCallback(async (blob: Blob) => {
+    if (!audioContextRef.current) return null;
+    const arrayBuffer = await blob.arrayBuffer();
+    const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
+    vocalBufferRef.current = audioBuffer;
+    return audioBuffer;
+  }, []);
+
+  const playPreview = useCallback((settings: MixSettings) => {
+    if (!audioContextRef.current || !trackBufferRef.current || !vocalBufferRef.current) return;
+    
+    stopPreview(); // Stop existing
+
+    const ctx = audioContextRef.current;
+    
+    // Track setup
+    trackSourceRef.current = ctx.createBufferSource();
+    trackSourceRef.current.buffer = trackBufferRef.current;
+    trackGainRef.current = ctx.createGain();
+    trackGainRef.current.gain.value = settings.trackVolume / 100;
+    trackSourceRef.current.connect(trackGainRef.current);
+    trackGainRef.current.connect(ctx.destination);
+
+    // Vocal setup
+    vocalSourceRef.current = ctx.createBufferSource();
+    vocalSourceRef.current.buffer = vocalBufferRef.current;
+    vocalGainRef.current = ctx.createGain();
+    vocalGainRef.current.gain.value = settings.vocalVolume / 100;
+    
+    // Effects chain
+    if (settings.reverbEnabled && reverbBufferRef.current) {
+      const convolver = ctx.createConvolver();
+      convolver.buffer = reverbBufferRef.current;
+      
+      const wetGain = ctx.createGain();
+      const dryGain = ctx.createGain();
+      
+      wetGain.gain.value = 0.3;
+      dryGain.gain.value = 0.7;
+
+      vocalSourceRef.current.connect(dryGain);
+      dryGain.connect(vocalGainRef.current);
+
+      vocalSourceRef.current.connect(convolver);
+      convolver.connect(wetGain);
+      wetGain.connect(vocalGainRef.current);
+    } else {
+      vocalSourceRef.current.connect(vocalGainRef.current);
+    }
+    
+    vocalGainRef.current.connect(ctx.destination);
+
+    // Sync with latency offset (offset is in ms, we need seconds)
+    const offsetSeconds = settings.latencyOffsetMs / 1000;
+    
+    const startTime = ctx.currentTime + 0.1;
+    
+    if (offsetSeconds >= 0) {
+      // Delay vocals
+      trackSourceRef.current.start(startTime);
+      vocalSourceRef.current.start(startTime + offsetSeconds);
+    } else {
+      // Delay track
+      trackSourceRef.current.start(startTime + Math.abs(offsetSeconds));
+      vocalSourceRef.current.start(startTime);
+    }
+    
+    setIsPlaying(true);
+    
+    trackSourceRef.current.onended = () => setIsPlaying(false);
+  }, []);
+
+  const stopPreview = useCallback(() => {
+    if (trackSourceRef.current) {
+      try { trackSourceRef.current.stop(); } catch (e) {}
+    }
+    if (vocalSourceRef.current) {
+      try { vocalSourceRef.current.stop(); } catch (e) {}
+    }
+    setIsPlaying(false);
+  }, []);
+
+  const exportMix = useCallback(async (settings: MixSettings): Promise<Blob | null> => {
+    if (!trackBufferRef.current || !vocalBufferRef.current) return null;
+    setIsProcessing(true);
+    
+    try {
+      const sampleRate = trackBufferRef.current.sampleRate;
+      // Calculate length based on latency offset
+      const lengthSeconds = Math.max(
+        trackBufferRef.current.duration + (settings.latencyOffsetMs < 0 ? Math.abs(settings.latencyOffsetMs) / 1000 : 0),
+        vocalBufferRef.current.duration + (settings.latencyOffsetMs > 0 ? settings.latencyOffsetMs / 1000 : 0)
+      );
+      
+      const offlineCtx = new OfflineAudioContext(
+        2, 
+        Math.ceil(sampleRate * lengthSeconds), 
+        sampleRate
+      );
+
+      // Track Setup
+      const trackSource = offlineCtx.createBufferSource();
+      trackSource.buffer = trackBufferRef.current;
+      const trackGain = offlineCtx.createGain();
+      trackGain.gain.value = settings.trackVolume / 100;
+      trackSource.connect(trackGain);
+      trackGain.connect(offlineCtx.destination);
+
+      // Vocal Setup
+      const vocalSource = offlineCtx.createBufferSource();
+      vocalSource.buffer = vocalBufferRef.current;
+      const vocalGain = offlineCtx.createGain();
+      vocalGain.gain.value = settings.vocalVolume / 100;
+      
+      if (settings.reverbEnabled && reverbBufferRef.current) {
+        const convolver = offlineCtx.createConvolver();
+        convolver.buffer = reverbBufferRef.current;
+        const wetGain = offlineCtx.createGain();
+        const dryGain = offlineCtx.createGain();
+        wetGain.gain.value = 0.3;
+        dryGain.gain.value = 0.7;
+        vocalSource.connect(dryGain);
+        dryGain.connect(vocalGain);
+        vocalSource.connect(convolver);
+        convolver.connect(wetGain);
+        wetGain.connect(vocalGain);
+      } else {
+        vocalSource.connect(vocalGain);
+      }
+      vocalGain.connect(offlineCtx.destination);
+
+      const offsetSeconds = settings.latencyOffsetMs / 1000;
+      if (offsetSeconds >= 0) {
+        trackSource.start(0);
+        vocalSource.start(offsetSeconds);
+      } else {
+        trackSource.start(Math.abs(offsetSeconds));
+        vocalSource.start(0);
+      }
+
+      const renderedBuffer = await offlineCtx.startRendering();
+      const wavBlob = audioBufferToWav(renderedBuffer);
+      return wavBlob;
+    } catch (err) {
+      console.error('Export failed', err);
+      return null;
+    } finally {
+      setIsProcessing(false);
+    }
+  }, []);
+
+  return {
+    loadTrack,
+    loadVocal,
+    playPreview,
+    stopPreview,
+    exportMix,
+    isPlaying,
+    isProcessing,
+  };
+}
