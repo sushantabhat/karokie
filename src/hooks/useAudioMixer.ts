@@ -27,6 +27,8 @@ export function useAudioMixer() {
   const vocalGainRef = useRef<GainNode | null>(null);
   
   const [isProcessing, setIsProcessing] = useState(false);
+  const [trackBuffer, setTrackBuffer] = useState<AudioBuffer | null>(null);
+  const [vocalBuffer, setVocalBuffer] = useState<AudioBuffer | null>(null);
 
   // Initialize AudioContext
   useEffect(() => {
@@ -63,6 +65,7 @@ export function useAudioMixer() {
     const arrayBuffer = await file.arrayBuffer();
     const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
     trackBufferRef.current = audioBuffer;
+    setTrackBuffer(audioBuffer);
     return audioBuffer;
   }, []);
 
@@ -71,6 +74,7 @@ export function useAudioMixer() {
     const arrayBuffer = await blob.arrayBuffer();
     const audioBuffer = await audioContextRef.current.decodeAudioData(arrayBuffer);
     vocalBufferRef.current = audioBuffer;
+    setVocalBuffer(audioBuffer);
     return audioBuffer;
   }, []);
 
@@ -88,8 +92,8 @@ export function useAudioMixer() {
     setIsPaused(false);
   }, []);
 
-  const playPreview = useCallback(async (settings: MixSettings) => {
-    if (!audioContextRef.current || !trackBufferRef.current || !vocalBufferRef.current) return;
+  const playPreview = useCallback(async (settings: MixSettings, startOffset: number = 0) => {
+    if (!audioContextRef.current || !trackBufferRef.current) return;
     
     stopPreview(); // Stop existing
 
@@ -106,48 +110,67 @@ export function useAudioMixer() {
     trackSourceRef.current.connect(trackGainRef.current);
     trackGainRef.current.connect(ctx.destination);
 
-    // Vocal setup
-    vocalSourceRef.current = ctx.createBufferSource();
-    vocalSourceRef.current.buffer = vocalBufferRef.current;
-    vocalGainRef.current = ctx.createGain();
-    vocalGainRef.current.gain.value = settings.vocalVolume / 100;
-    
-    // Effects chain
-    if (settings.reverbEnabled && reverbBufferRef.current) {
-      const convolver = ctx.createConvolver();
-      convolver.buffer = reverbBufferRef.current;
+    // Vocal setup (only if vocal buffer exists)
+    if (vocalBufferRef.current) {
+      vocalSourceRef.current = ctx.createBufferSource();
+      vocalSourceRef.current.buffer = vocalBufferRef.current;
+      vocalGainRef.current = ctx.createGain();
+      vocalGainRef.current.gain.value = settings.vocalVolume / 100;
       
-      const wetGain = ctx.createGain();
-      const dryGain = ctx.createGain();
+      // Effects chain
+      if (settings.reverbEnabled && reverbBufferRef.current) {
+        const convolver = ctx.createConvolver();
+        convolver.buffer = reverbBufferRef.current;
+        
+        const wetGain = ctx.createGain();
+        const dryGain = ctx.createGain();
+        
+        wetGain.gain.value = 0.3;
+        dryGain.gain.value = 0.7;
+
+        vocalSourceRef.current.connect(dryGain);
+        dryGain.connect(vocalGainRef.current);
+
+        vocalSourceRef.current.connect(convolver);
+        convolver.connect(wetGain);
+        wetGain.connect(vocalGainRef.current);
+      } else {
+        vocalSourceRef.current.connect(vocalGainRef.current);
+      }
       
-      wetGain.gain.value = 0.3;
-      dryGain.gain.value = 0.7;
-
-      vocalSourceRef.current.connect(dryGain);
-      dryGain.connect(vocalGainRef.current);
-
-      vocalSourceRef.current.connect(convolver);
-      convolver.connect(wetGain);
-      wetGain.connect(vocalGainRef.current);
-    } else {
-      vocalSourceRef.current.connect(vocalGainRef.current);
+      vocalGainRef.current.connect(ctx.destination);
     }
-    
-    vocalGainRef.current.connect(ctx.destination);
 
     // Sync with latency offset (offset is in ms, we need seconds)
     const offsetSeconds = settings.latencyOffsetMs / 1000;
-    
     const startTime = ctx.currentTime + 0.1;
     
-    if (offsetSeconds >= 0) {
-      // Delay vocals
-      trackSourceRef.current.start(startTime);
-      vocalSourceRef.current.start(startTime + offsetSeconds);
+    // Calculate start time in the buffer based on the requested seek offset
+    const trackStartOffset = startOffset;
+    
+    if (vocalBufferRef.current) {
+      if (offsetSeconds >= 0) {
+        // Track starts at 0, Vocals delayed by offsetSeconds
+        trackSourceRef.current.start(startTime, trackStartOffset);
+        
+        const vocalBufferOffset = Math.max(0, startOffset - offsetSeconds);
+        const vocalStartTime = startTime + Math.max(0, offsetSeconds - startOffset);
+        if (vocalBufferOffset < vocalBufferRef.current.duration) {
+          vocalSourceRef.current!.start(vocalStartTime, vocalBufferOffset);
+        }
+      } else {
+        // Vocals start at 0, Track delayed by abs(offsetSeconds)
+        const trackDelay = Math.abs(offsetSeconds);
+        const trackStartTime = startTime + Math.max(0, trackDelay - startOffset);
+        const trackBufferOffset = Math.max(0, startOffset - trackDelay);
+        trackSourceRef.current.start(trackStartTime, trackBufferOffset);
+        
+        if (startOffset < vocalBufferRef.current.duration) {
+          vocalSourceRef.current!.start(startTime, startOffset);
+        }
+      }
     } else {
-      // Delay track
-      trackSourceRef.current.start(startTime + Math.abs(offsetSeconds));
-      vocalSourceRef.current.start(startTime);
+      trackSourceRef.current.start(startTime, trackStartOffset);
     }
     
     setIsPlaying(true);
@@ -189,7 +212,6 @@ export function useAudioMixer() {
     try {
       const sampleRate = trackBufferRef.current.sampleRate;
       
-      // Trim the export to end exactly when the vocal recording ends
       const vocalDuration = vocalBufferRef.current.duration;
       const lengthSeconds = vocalDuration + (settings.latencyOffsetMs > 0 ? settings.latencyOffsetMs / 1000 : 0);
       
@@ -199,7 +221,6 @@ export function useAudioMixer() {
         sampleRate
       );
 
-      // Track Setup
       const trackSource = offlineCtx.createBufferSource();
       trackSource.buffer = trackBufferRef.current;
       const trackGain = offlineCtx.createGain();
@@ -207,7 +228,6 @@ export function useAudioMixer() {
       trackSource.connect(trackGain);
       trackGain.connect(offlineCtx.destination);
 
-      // Vocal Setup
       const vocalSource = offlineCtx.createBufferSource();
       vocalSource.buffer = vocalBufferRef.current;
       const vocalGain = offlineCtx.createGain();
@@ -263,5 +283,7 @@ export function useAudioMixer() {
     isProcessing,
     setTrackVolumeLive,
     setVocalVolumeLive,
+    trackBuffer,
+    vocalBuffer,
   };
 }

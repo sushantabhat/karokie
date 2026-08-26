@@ -8,6 +8,8 @@ export function useAudioRecorder() {
   const [recordedBlob, setRecordedBlob] = useState<Blob | null>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
+  const audioCtxRef = useRef<AudioContext | null>(null);
+  const analyserRef = useRef<AnalyserNode | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
   const startRecording = useCallback(async () => {
@@ -20,6 +22,15 @@ export function useAudioRecorder() {
         },
       });
       streamRef.current = stream;
+      
+      // Set up AudioContext & Analyser for visualizer
+      const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      audioCtxRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 2048;
+      source.connect(analyser);
+      analyserRef.current = analyser;
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -48,6 +59,11 @@ export function useAudioRecorder() {
       mediaRecorderRef.current.stop();
       setIsRecording(false);
       setIsPaused(false);
+      
+      if (audioCtxRef.current?.state !== 'closed') {
+        audioCtxRef.current?.close();
+      }
+      analyserRef.current = null;
       
       // Stop all tracks to release the microphone
       if (streamRef.current) {
@@ -86,5 +102,6 @@ export function useAudioRecorder() {
     pauseRecording,
     resumeRecording,
     resetRecording,
+    analyser: analyserRef.current,
   };
 }
