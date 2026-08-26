@@ -167,7 +167,7 @@ export default function KaraokeStudio() {
           {/* TRACK UPLOAD PANEL */}
           <div className="bg-[#1b1b1d] border border-[#27272a] rounded p-6 space-y-4 flex flex-col">
             <div className="flex items-center justify-between border-b border-[#27272a] pb-4">
-              <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Track 1: Instrumentals</h2>
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Backing Track</h2>
             </div>
             
             {!trackFile ? (
@@ -213,7 +213,7 @@ export default function KaraokeStudio() {
           {/* HEADPHONES & RECORD PANEL */}
           <div className={`bg-[#1b1b1d] border border-[#27272a] rounded p-6 space-y-4 flex flex-col transition-opacity duration-300 ${!trackFile ? 'opacity-50 pointer-events-none' : ''}`}>
             <div className="flex items-center justify-between border-b border-[#27272a] pb-4">
-              <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Track 2: Vocals</h2>
+              <h2 className="text-sm font-semibold tracking-wide uppercase text-[#a1a1aa]">Your Vocals</h2>
               {isRecording && <div className="text-xs font-mono text-[#ef4444] animate-pulse flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#ef4444]"></div> REC</div>}
             </div>
 
@@ -301,7 +301,7 @@ export default function KaraokeStudio() {
               </div>
               <div className="space-y-1">
                 <div className="flex justify-between text-xs font-mono text-[#a1a1aa]">
-                  <span>Track 1</span>
+                  <span>Backing Track</span>
                   <span>{mixSettings.trackVolume}%</span>
                 </div>
                 <input 
@@ -317,7 +317,7 @@ export default function KaraokeStudio() {
               </div>
               <div className="space-y-1 pt-2">
                 <div className="flex justify-between text-xs font-mono text-[#a1a1aa]">
-                  <span>Track 2</span>
+                  <span>Your Vocals</span>
                   <span>{mixSettings.vocalVolume}%</span>
                 </div>
                 <input 
