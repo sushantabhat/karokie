@@ -575,7 +575,7 @@ export default function KaraokeStudio() {
     }
   };
 
-  // Spacebar Syncing Logic (Word by Word)
+  // Spacebar Syncing Logic (Tap-Only Word by Word)
   useEffect(() => {
     const totalWords = lyrics.reduce((acc, line) => acc + line.words.length, 0);
 
@@ -592,39 +592,32 @@ export default function KaraokeStudio() {
           setLyrics(prev => {
             const next = JSON.parse(JSON.stringify(prev)); // Deep copy for nested mutability
             let flatIdx = 0;
+            
+            // 1. End the previous word
+            if (activeWordIndex > 0) {
+              for (let i = 0; i < next.length; i++) {
+                for (let j = 0; j < next[i].words.length; j++) {
+                  if (flatIdx === activeWordIndex - 1) {
+                    // Cap the previous word's duration if the gap is too long (e.g. max 1.5s)
+                    const cappedEnd = Math.min(currentTime, next[i].words[j].start! + 1.5);
+                    next[i].words[j].end = cappedEnd;
+                    if (j === next[i].words.length - 1) next[i].end = cappedEnd;
+                  }
+                  flatIdx++;
+                }
+              }
+            }
+
+            // 2. Start the current word
+            flatIdx = 0;
             for (let i = 0; i < next.length; i++) {
               for (let j = 0; j < next[i].words.length; j++) {
                 if (flatIdx === activeWordIndex) {
                   next[i].words[j].start = currentTime;
+                  // Provide a default end time just in case this is the last word they tap
+                  next[i].words[j].end = currentTime + 0.8;
                   if (j === 0) next[i].start = currentTime; // line start
-                }
-                flatIdx++;
-              }
-            }
-            return next;
-          });
-        }
-      }
-    };
-
-    const handleKeyUp = (e: KeyboardEvent) => {
-      if (activeTab === "LYRICS" && e.code === "Space") {
-        const activeTag = document.activeElement?.tagName;
-        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
-        
-        e.preventDefault();
-        if (!isPlaying || !isSpacebarDown) return;
-        setIsSpacebarDown(false);
-
-        if (activeWordIndex < totalWords) {
-          setLyrics(prev => {
-            const next = JSON.parse(JSON.stringify(prev));
-            let flatIdx = 0;
-            for (let i = 0; i < next.length; i++) {
-              for (let j = 0; j < next[i].words.length; j++) {
-                if (flatIdx === activeWordIndex) {
-                  next[i].words[j].end = currentTime;
-                  if (j === next[i].words.length - 1) next[i].end = currentTime; // line end
+                  if (j === next[i].words.length - 1) next[i].end = currentTime + 0.8; 
                 }
                 flatIdx++;
               }
@@ -633,6 +626,12 @@ export default function KaraokeStudio() {
           });
           setActiveWordIndex(prev => prev + 1);
         }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (activeTab === "LYRICS" && e.code === "Space") {
+        setIsSpacebarDown(false);
       }
     };
 
@@ -789,9 +788,32 @@ export default function KaraokeStudio() {
                   <div className="bg-[#16181f] border border-[#1f222b] rounded-lg p-6 flex flex-col items-center justify-center min-h-[120px] shadow-sm">
                     <div className="flex flex-wrap justify-center gap-x-2">
                       {currentLine ? currentLine.words.map((w, i) => {
-                        const isSung = w.start !== null && currentTime >= w.start;
+                        const isWordSung = w.start !== null && currentTime >= w.start && (w.end === null || currentTime <= w.end);
+                        const isWordPast = w.end !== null && currentTime > w.end;
+                        
+                        let progress = 0;
+                        if (isWordSung && w.end && w.end > w.start!) {
+                           progress = Math.min(100, Math.max(0, ((currentTime - w.start!) / (w.end - w.start!)) * 100));
+                        } else if (isWordPast) {
+                           progress = 100;
+                        }
+
+                        let baseStyle: React.CSSProperties = {};
+                        let colorClass = 'text-[#71717a]'; 
+                        
+                        if (isWordSung || isWordPast) {
+                          colorClass = 'drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]';
+                          baseStyle = {
+                            backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                            color: 'transparent'
+                          };
+                        }
+
                         return (
-                          <span key={i} className={`text-2xl md:text-3xl font-black tracking-tight ${isSung ? 'text-[#38bdf8] drop-shadow-md' : 'text-[#71717a]'}`}>
+                          <span key={i} style={baseStyle} className={`text-2xl md:text-3xl font-black tracking-tight ${colorClass}`}>
                             {w.text}
                           </span>
                         );
@@ -1013,7 +1035,7 @@ export default function KaraokeStudio() {
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">📝 Lyrics Studio</h2>
                 <p className="text-xs text-[#a1a1aa] mt-1">
                   Hit Play, then use the <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Spacebar</kbd> like a rhythm game. <br/>
-                  <strong>Tap</strong> to set the start of a word. <strong>Hold</strong> to capture the duration of long notes.
+                  Just <strong>Tap</strong> the spacebar for each word as the singer sings it. The lengths are calculated automatically!
                 </p>
               </div>
               <div className="flex gap-2">
@@ -1081,15 +1103,35 @@ export default function KaraokeStudio() {
                             const isWordSung = w.start !== null && currentTime >= w.start && (w.end === null || currentTime <= w.end);
                             const isWordPast = w.end !== null && currentTime > w.end;
                             
+                            let progress = 0;
+                            if (isWordSung && w.end && w.end > w.start!) {
+                               progress = Math.min(100, Math.max(0, ((currentTime - w.start!) / (w.end - w.start!)) * 100));
+                            } else if (isWordPast) {
+                               progress = 100;
+                            }
+                            
+                            let baseStyle: React.CSSProperties = {};
                             let colorClass = 'text-[#71717a]'; // default unsynced
-                            if (isWordSung || (isSpacebarDown && isWordActiveTarget)) colorClass = 'text-[#38bdf8] drop-shadow-[0_0_8px_rgba(56,189,248,0.8)] scale-110 -translate-y-1'; 
-                            else if (isWordPast) colorClass = 'text-[#10b981]'; 
-                            else if (w.start !== null) colorClass = 'text-[#fafafa]'; 
+                            
+                            if (isWordSung || isWordPast) {
+                              colorClass = 'drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]';
+                              if (isWordSung) colorClass += ' scale-110 -translate-y-1';
+                              baseStyle = {
+                                backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`,
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                backgroundClip: 'text',
+                                color: 'transparent'
+                              };
+                            } else if (w.start !== null) {
+                              colorClass = 'text-[#fafafa]'; 
+                            }
 
                             return (
                               <span 
                                 key={wIdx} 
-                                className={`text-3xl md:text-5xl font-bold transition-all duration-150 inline-block ${colorClass} ${isWordActiveTarget ? 'border-b-4 border-[#fb7185] pb-1' : 'border-b-4 border-transparent pb-1'}`}
+                                style={baseStyle}
+                                className={`text-3xl md:text-5xl font-bold transition-all duration-75 inline-block ${colorClass} ${isWordActiveTarget ? 'border-b-4 border-[#fb7185] pb-1' : 'border-b-4 border-transparent pb-1'}`}
                               >
                                 {w.text}
                               </span>
