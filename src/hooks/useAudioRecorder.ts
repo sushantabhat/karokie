@@ -24,6 +24,7 @@ export function useAudioRecorder() {
       streamRef.current = stream;
       
       // Set up AudioContext & Analyser for visualizer
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioCtxRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
@@ -102,6 +103,6 @@ export function useAudioRecorder() {
     pauseRecording,
     resumeRecording,
     resetRecording,
-    analyser: analyserRef.current,
+    getAnalyser: () => analyserRef.current,
   };
 }

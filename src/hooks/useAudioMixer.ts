@@ -31,6 +31,7 @@ export function useAudioMixer() {
 
   // Initialize AudioContext
   useEffect(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     audioContextRef.current = new (window.AudioContext || (window as any).webkitAudioContext)();
     
     // Generate a simple impulse response for reverb
@@ -129,10 +130,10 @@ export function useAudioMixer() {
   const stopPreview = useCallback(() => {
     if (trackSourceRef.current) {
       trackSourceRef.current.onended = null;
-      try { trackSourceRef.current.stop(); } catch (e) {}
+      try { trackSourceRef.current.stop(); } catch {}
     }
     if (vocalSourceRef.current) {
-      try { vocalSourceRef.current.stop(); } catch (e) {}
+      try { vocalSourceRef.current.stop(); } catch {}
     }
     if (audioContextRef.current?.state === 'suspended') {
       audioContextRef.current.resume();

@@ -4,12 +4,16 @@ import { useState, useRef, useEffect } from 'react';
 import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2, Volume2, Mic2 } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
+import { saveTrackToDB, getTrackFromDB, saveVocalToDB, getVocalFromDB } from '@/utils/indexedDB';
+import { audioBufferToWav } from '@/utils/audioBufferToWav';
 
 function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeekStart, onSeekDrag, onSeekEnd, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string, duration: number, currentTime: number, totalDuration?: number, onSeekStart?: (time: number) => void, onSeekDrag?: (time: number) => void, onSeekEnd?: (time: number) => void, emptyText?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   
+  const [isDraggingState, setIsDraggingState] = useState(false);
+
   useEffect(() => {
     if (!canvasRef.current || !buffer) return;
     const canvas = canvasRef.current;
@@ -26,7 +30,6 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
     const targetWidth = canvas.width * widthProportion;
     
     const step = Math.ceil(data.length / targetWidth);
-    const amp = canvas.height / 2;
     
     ctx.fillStyle = color;
     for (let i = 0; i < targetWidth; i++) {
@@ -61,6 +64,7 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
 
   const handleMouseDown = (e: React.MouseEvent<HTMLDivElement>) => {
     isDragging.current = true;
+    setIsDraggingState(true);
     if (onSeekStart) onSeekStart(calculateSeekTime(e.clientX));
   };
 
@@ -74,11 +78,13 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
     const handleGlobalMouseUp = (e: MouseEvent) => {
       if (isDragging.current) {
         isDragging.current = false;
+        setIsDraggingState(false);
         if (onSeekEnd) onSeekEnd(calculateSeekTime(e.clientX));
       }
     };
     window.addEventListener('mouseup', handleGlobalMouseUp);
     return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [onSeekEnd, actualTotalDuration]);
 
   return (
@@ -97,11 +103,51 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
       )}
       <div 
         className="absolute top-0 bottom-0 w-[2px] bg-[#3b82f6] z-10 shadow-[0_0_8px_rgba(59,130,246,0.8)] pointer-events-none"
-        style={{ left: `${Math.min(progress, 100)}%`, transition: isDragging.current ? 'none' : 'left 0.1s linear' }}
+        style={{ left: `${Math.min(progress, 100)}%`, transition: isDraggingState ? 'none' : 'left 0.1s linear' }}
       />
     </div>
   );
 }
+
+// ==== Auto-Save (localStorage) helpers ====
+// Key for the index that tracks recent saved tracks (max 10)
+const AUTOSAVE_INDEX_KEY = 'lyricsAutosaveIndex';
+const AUTOSAVE_MAX = 10;
+
+// Compute SHA-256 hash of a File (hex string)
+const hashFile = async (file: File): Promise<string> => {
+  const arrayBuffer = await file.arrayBuffer();
+  const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+};
+
+const loadLyricsFromLocalStorage = (hash: string) => {
+  const data = localStorage.getItem(`lyrics-autosave-${hash}`);
+  if (!data) return null;
+  try {
+    return JSON.parse(data);
+  } catch {
+    // Corrupt entry - clean it up
+    localStorage.removeItem(`lyrics-autosave-${hash}`);
+    return null;
+  }
+};
+
+const saveLyricsToLocalStorage = (hash: string, ly: { text: string; time: number | null }[]) => {
+  localStorage.setItem(`lyrics-autosave-${hash}`, JSON.stringify(ly));
+  // Update the LRU index
+  const indexRaw = localStorage.getItem(AUTOSAVE_INDEX_KEY);
+  const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
+  const existingPos = index.indexOf(hash);
+  if (existingPos !== -1) index.splice(existingPos, 1);
+  index.unshift(hash); // most recent at front
+  if (index.length > AUTOSAVE_MAX) {
+    const evicted = index.pop();
+    if (evicted) localStorage.removeItem(`lyrics-autosave-${evicted}`);
+  }
+  localStorage.setItem(AUTOSAVE_INDEX_KEY, JSON.stringify(index));
+};
 
 export default function KaraokeStudio() {
   const [trackFile, setTrackFile] = useState<File | null>(null);
@@ -111,7 +157,7 @@ export default function KaraokeStudio() {
   
   const { 
     isRecording, isPaused: isRecPaused, 
-    recordedBlob, startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, analyser 
+    recordedBlob, startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, getAnalyser 
   } = useAudioRecorder();
 
   const { 
@@ -139,49 +185,65 @@ export default function KaraokeStudio() {
     reverbEnabled: false,
   });
 
-  // ==== Auto‑Save (localStorage) helpers ====
-  // Key for the index that tracks recent saved tracks (max 10)
-  const AUTOSAVE_INDEX_KEY = 'lyricsAutosaveIndex';
-  const AUTOSAVE_MAX = 10;
-
-  // Compute SHA‑256 hash of a File (hex string)
-  const hashFile = async (file: File): Promise<string> => {
-    const arrayBuffer = await file.arrayBuffer();
-    const hashBuffer = await crypto.subtle.digest('SHA-256', arrayBuffer);
-    const hashArray = Array.from(new Uint8Array(hashBuffer));
-    return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
-  };
-
-  const loadLyricsFromLocalStorage = (hash: string): typeof lyrics | null => {
-    const data = localStorage.getItem(`lyrics-autosave-${hash}`);
-    if (!data) return null;
-    try {
-      return JSON.parse(data) as typeof lyrics;
-    } catch {
-      // Corrupt entry – clean it up
-      localStorage.removeItem(`lyrics-autosave-${hash}`);
-      return null;
-    }
-  };
-
-  const saveLyricsToLocalStorage = (hash: string, ly: typeof lyrics) => {
-    localStorage.setItem(`lyrics-autosave-${hash}`, JSON.stringify(ly));
-    // Update the LRU index
-    const indexRaw = localStorage.getItem(AUTOSAVE_INDEX_KEY);
-    const index: string[] = indexRaw ? JSON.parse(indexRaw) : [];
-    const existingPos = index.indexOf(hash);
-    if (existingPos !== -1) index.splice(existingPos, 1);
-    index.unshift(hash); // most recent at front
-    if (index.length > AUTOSAVE_MAX) {
-      const evicted = index.pop();
-      if (evicted) localStorage.removeItem(`lyrics-autosave-${evicted}`);
-    }
-    localStorage.setItem(AUTOSAVE_INDEX_KEY, JSON.stringify(index));
-  };
-
   // ==== UI state ====
-  const [autoSaved, setAutoSaved] = useState(false);
+  const [, setAutoSaved] = useState(false);
   const [trackHash, setTrackHash] = useState<string | null>(null);
+
+  // Auto-save lyrics whenever they change
+  useEffect(() => {
+    if (trackHash) {
+      saveLyricsToLocalStorage(trackHash, lyrics);
+    }
+  }, [lyrics, trackHash]);
+
+  // Restore session from IndexedDB on mount
+  useEffect(() => {
+    async function restoreSession() {
+      try {
+        const savedTrack = await getTrackFromDB();
+        if (savedTrack && savedTrack.file) {
+          setTrackFile(savedTrack.file);
+          const url = URL.createObjectURL(savedTrack.file);
+          setTrackUrl(url);
+          setTrackHash(savedTrack.hash);
+          
+          const saved = loadLyricsFromLocalStorage(savedTrack.hash);
+          if (saved) {
+            setLyrics(saved);
+            setAutoSaved(true);
+            setTimeout(() => setAutoSaved(false), 3000);
+          }
+          await loadTrack(savedTrack.file);
+        }
+
+        const savedVocal = await getVocalFromDB();
+        if (savedVocal) {
+          loadVocal(savedVocal);
+        }
+
+        const savedTime = localStorage.getItem('playbackTime');
+        if (savedTime) {
+          setCurrentTime(parseFloat(savedTime));
+        }
+      } catch (err) {
+        console.error("Failed to restore session from DB", err);
+      }
+    }
+    restoreSession();
+  }, [loadTrack, loadVocal]);
+
+  // Auto-save playback time
+  useEffect(() => {
+    localStorage.setItem('playbackTime', currentTime.toString());
+  }, [currentTime]);
+
+  // Auto-save vocal buffer when it changes
+  useEffect(() => {
+    if (vocalBuffer) {
+      const blob = audioBufferToWav(vocalBuffer);
+      saveVocalToDB(blob).catch(console.error);
+    }
+  }, [vocalBuffer]);
 
   // ==== Export .LRC ====
   const formatLRC = () => {
@@ -208,6 +270,7 @@ export default function KaraokeStudio() {
     URL.revokeObjectURL(url);
   };
 
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateSetting = (key: keyof MixSettings, value: any) => {
     setMixSettings(prev => ({ ...prev, [key]: value }));
   };
@@ -227,6 +290,10 @@ export default function KaraokeStudio() {
         setAutoSaved(true);
         setTimeout(() => setAutoSaved(false), 3000);
       }
+      
+      // Save track to IndexedDB to survive refresh
+      await saveTrackToDB({ file, hash, name: file.name });
+      
       await loadTrack(file);
     }
   };
@@ -338,6 +405,7 @@ export default function KaraokeStudio() {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
 
+    const analyser = getAnalyser();
     if (!isRecording || isRecPaused || !analyser) {
       ctx.fillStyle = '#121214';
       ctx.fillRect(0, 0, canvas.width, canvas.height);
@@ -380,10 +448,11 @@ export default function KaraokeStudio() {
 
     draw();
     return () => cancelAnimationFrame(animationId);
-  }, [isRecording, isRecPaused, analyser]);
+  }, [isRecording, isRecPaused, getAnalyser]);
 
   // Reset time when stopping
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     if (!isRecording && !isPlaying) setCurrentTime(0);
   }, [isRecording, isPlaying]);
 
