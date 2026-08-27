@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2, Volume2, Mic2 } from 'lucide-react';
+import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2, Volume2, Mic2, RotateCcw, Target, Plus, Minus } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 import { saveTrackToDB, getTrackFromDB, saveVocalToDB, getVocalFromDB } from '@/utils/indexedDB';
@@ -122,6 +122,9 @@ const hashFile = async (file: File): Promise<string> => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
+export type WordSync = { text: string; start: number | null; end: number | null; absoluteIdx: number };
+export type LineSync = { text: string; start: number | null; end: number | null; words: WordSync[] };
+
 const loadLyricsFromLocalStorage = (hash: string) => {
   const data = localStorage.getItem(`lyrics-autosave-${hash}`);
   if (!data) return null;
@@ -134,7 +137,7 @@ const loadLyricsFromLocalStorage = (hash: string) => {
   }
 };
 
-const saveLyricsToLocalStorage = (hash: string, ly: { text: string; time: number | null }[]) => {
+const saveLyricsToLocalStorage = (hash: string, ly: LineSync[]) => {
   localStorage.setItem(`lyrics-autosave-${hash}`, JSON.stringify(ly));
   // Update the LRU index
   const indexRaw = localStorage.getItem(AUTOSAVE_INDEX_KEY);
@@ -169,11 +172,11 @@ export default function KaraokeStudio() {
   type Tab = "MIXER" | "LYRICS";
   const [activeTab, setActiveTab] = useState<Tab>("MIXER");
   const [rawLyricsText, setRawLyricsText] = useState("");
-  const [lyrics, setLyrics] = useState<{ text: string; time: number | null }[]>([]);
-  const [syncIndex, setSyncIndex] = useState(0);
-  const [isLyricsLocked, setIsLyricsLocked] = useState(false);
-
+  const [lyrics, setLyrics] = useState<LineSync[]>([]);
+  const [activeWordIndex, setActiveWordIndex] = useState(0);
+  const [isSpacebarDown, setIsSpacebarDown] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
+  
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const punchInTimeRef = useRef<number>(0);
@@ -248,9 +251,9 @@ export default function KaraokeStudio() {
   // ==== Export .LRC ====
   const formatLRC = () => {
     return lyrics
-      .filter(l => l.time !== null)
+      .filter(l => l.start !== null)
       .map(l => {
-        const t = l.time!;
+        const t = l.start!;
         const mins = Math.floor(t / 60);
         const secs = (t % 60).toFixed(2).padStart(5, '0');
         return `[${mins}:${secs}] ${l.text}`;
@@ -303,6 +306,7 @@ export default function KaraokeStudio() {
     if (file) {
       const reader = new FileReader();
       reader.onload = (ev) => {
+        let absIdx = 0;
         const text = ev.target?.result as string;
         const parsed = text
           .split('\n')
@@ -313,12 +317,17 @@ export default function KaraokeStudio() {
               const secs = parseFloat(match[2]);
               const time = mins * 60 + secs;
               const txt = match[3].trim();
-              return { text: txt, time } as typeof lyrics[0];
+              const words = txt.split(/\s+/).filter(w => w).map(w => ({ text: w, start: null, end: null, absoluteIdx: absIdx++ }));
+              return { text: txt, start: time, end: null, words } as LineSync;
             }
             const txt = line.trim();
-            return txt ? { text: txt, time: null } as typeof lyrics[0] : null;
+            if (txt) {
+               const words = txt.split(/\s+/).filter(w => w).map(w => ({ text: w, start: null, end: null, absoluteIdx: absIdx++ }));
+               return { text: txt, start: null, end: null, words } as LineSync;
+            }
+            return null;
           })
-          .filter((l): l is typeof lyrics[0] => l !== null && l.text !== '');
+          .filter((l): l is LineSync => l !== null && l.text !== '');
         setLyrics(parsed);
         // Show a toast indicating LRC loaded
         setAutoSaved(true);
@@ -561,35 +570,74 @@ export default function KaraokeStudio() {
     }
   };
 
-  // Enter Key Syncing Logic
+  // Spacebar Syncing Logic (Word by Word)
   useEffect(() => {
+    const totalWords = lyrics.reduce((acc, line) => acc + line.words.length, 0);
+
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (activeTab === "LYRICS" && e.key === "Enter") {
-        if (isLyricsLocked) return;
+      if (activeTab === "LYRICS" && e.code === "Space") {
         const activeTag = document.activeElement?.tagName;
         if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
         
-        e.preventDefault(); // Prevent page scroll or weird default behavior
-        
-        if (!isPlaying) {
-          console.warn("Please hit play first to sync!");
-          return;
-        }
+        e.preventDefault(); 
+        if (!isPlaying || isSpacebarDown) return;
+        setIsSpacebarDown(true);
 
-        if (syncIndex < lyrics.length) {
+        if (activeWordIndex < totalWords) {
           setLyrics(prev => {
-            const next = [...prev];
-            next[syncIndex] = { ...next[syncIndex], time: currentTime };
+            const next = JSON.parse(JSON.stringify(prev)); // Deep copy for nested mutability
+            let flatIdx = 0;
+            for (let i = 0; i < next.length; i++) {
+              for (let j = 0; j < next[i].words.length; j++) {
+                if (flatIdx === activeWordIndex) {
+                  next[i].words[j].start = currentTime;
+                  if (j === 0) next[i].start = currentTime; // line start
+                }
+                flatIdx++;
+              }
+            }
             return next;
           });
-          setSyncIndex(prev => prev + 1);
         }
       }
     };
-    // Use capture phase to guarantee we intercept it
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (activeTab === "LYRICS" && e.code === "Space") {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+        
+        e.preventDefault();
+        if (!isPlaying || !isSpacebarDown) return;
+        setIsSpacebarDown(false);
+
+        if (activeWordIndex < totalWords) {
+          setLyrics(prev => {
+            const next = JSON.parse(JSON.stringify(prev));
+            let flatIdx = 0;
+            for (let i = 0; i < next.length; i++) {
+              for (let j = 0; j < next[i].words.length; j++) {
+                if (flatIdx === activeWordIndex) {
+                  next[i].words[j].end = currentTime;
+                  if (j === next[i].words.length - 1) next[i].end = currentTime; // line end
+                }
+                flatIdx++;
+              }
+            }
+            return next;
+          });
+          setActiveWordIndex(prev => prev + 1);
+        }
+      }
+    };
+
     window.addEventListener("keydown", handleKeyDown, { capture: true });
-    return () => window.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [activeTab, isPlaying, syncIndex, lyrics.length, currentTime, isLyricsLocked]);
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
+    };
+  }, [activeTab, isPlaying, activeWordIndex, lyrics, currentTime, isSpacebarDown]);
 
   return (
     <div className="min-h-screen bg-[#0d0e12] text-[#fafafa] font-sans flex flex-col overflow-hidden">
@@ -712,16 +760,18 @@ export default function KaraokeStudio() {
           <div className="max-w-6xl mx-auto space-y-6">
             
             {/* TELEPROMPTER */}
-            {lyrics.some(l => l.time !== null) && (
+            {lyrics.some(l => l.start !== null || l.words.some(w => w.start !== null)) && (
               (() => {
                 let currentIdx = -1;
                 for (let i = lyrics.length - 1; i >= 0; i--) {
-                  if (lyrics[i].time !== null && lyrics[i].time! <= currentTime) {
+                  const lineStart = lyrics[i].start ?? lyrics[i].words.find(w => w.start !== null)?.start;
+                  if (lineStart !== undefined && lineStart !== null && lineStart <= currentTime) {
                     currentIdx = i;
                     break;
                   }
                 }
-                const currentText = currentIdx >= 0 ? lyrics[currentIdx].text : "Get ready...";
+                const currentLine = currentIdx >= 0 ? lyrics[currentIdx] : null;
+                const currentText = currentLine ? currentLine.text : "Get ready...";
                 let nextText = "";
                 for (let i = currentIdx + 1; i < lyrics.length; i++) {
                    if (lyrics[i].text.trim() !== "") {
@@ -732,9 +782,20 @@ export default function KaraokeStudio() {
                 
                 return (
                   <div className="bg-[#16181f] border border-[#1f222b] rounded-lg p-6 flex flex-col items-center justify-center min-h-[120px] shadow-sm">
-                    <span className="text-3xl font-black text-[#38bdf8] text-center drop-shadow-md tracking-tight">
-                      {currentText}
-                    </span>
+                    <div className="flex flex-wrap justify-center gap-x-2">
+                      {currentLine ? currentLine.words.map((w, i) => {
+                        const isSung = w.start !== null && currentTime >= w.start;
+                        return (
+                          <span key={i} className={`text-2xl md:text-3xl font-black tracking-tight ${isSung ? 'text-[#38bdf8] drop-shadow-md' : 'text-[#71717a]'}`}>
+                            {w.text}
+                          </span>
+                        );
+                      }) : (
+                        <span className="text-3xl font-black text-[#71717a] text-center drop-shadow-md tracking-tight">
+                          {currentText}
+                        </span>
+                      )}
+                    </div>
                     <span className="text-sm font-medium text-[#71717a] text-center mt-3">
                       {nextText}
                     </span>
@@ -946,52 +1007,27 @@ export default function KaraokeStudio() {
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">📝 Lyrics Studio</h2>
                 <p className="text-xs text-[#a1a1aa] mt-1">
-                  Hit play, then <strong>tap any line's text</strong> (or hit <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Enter</kbd>) to sync/overwrite it to the current time. <br/>
-                  <strong>Click a green timestamp</strong> to jump playback to that part of the song!
+                  Hit Play, then use the <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Spacebar</kbd> like a rhythm game. <br/>
+                  <strong>Tap</strong> to set the start of a word. <strong>Hold</strong> to capture the duration of long notes.
                 </p>
               </div>
               <div className="flex gap-2">
                 {lyrics.length > 0 && (
-                  <>
-                    <button 
-                      onClick={handlePlayPreviewClick}
-                      disabled={!trackBuffer}
-                      className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-bold transition-colors ${isPlaying ? 'bg-[#ef4444] text-white hover:bg-[#dc2626]' : 'bg-[#38bdf8] text-gray-900 hover:bg-[#0ea5e9]'} disabled:opacity-50`}
-                    >
-                      {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
-                      {isPlaying ? 'Pause' : 'Play'}
-                    </button>
-                    <button 
-                      onClick={() => setIsLyricsLocked(!isLyricsLocked)} 
-                      className={`px-4 py-2 rounded text-xs font-bold transition-colors ${isLyricsLocked ? 'bg-[#3f3f46] text-white hover:bg-[#27272a]' : 'bg-[#10b981] text-white hover:bg-[#059669]'}`}
-                    >
-                      {isLyricsLocked ? '🔓 Unlock' : '🔒 Lock Lyrics'}
-                    </button>
-                  </>
-                )}
-                {!isLyricsLocked && (
                   <button 
-                    onClick={() => {
-                      if (!isPlaying) {
-                      console.warn("Please hit play first to sync!");
-                      return;
-                    }
-                    if (syncIndex < lyrics.length) {
-                      setLyrics(prev => {
-                        const next = [...prev];
-                        next[syncIndex] = { ...next[syncIndex], time: currentTime };
-                        return next;
-                      });
-                      setSyncIndex(prev => prev + 1);
-                    }
-                  }} 
-                  disabled={lyrics.length === 0 || syncIndex >= lyrics.length || !isPlaying}
-                  className="px-4 py-2 bg-[#10b981] text-white rounded text-xs font-bold hover:bg-[#059669] transition-colors disabled:opacity-50 disabled:pointer-events-none"
-                >
-                  Sync Next Line (Enter)
+                    onClick={handlePlayPreviewClick}
+                    disabled={!trackBuffer}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-bold transition-colors ${isPlaying ? 'bg-[#ef4444] text-white hover:bg-[#dc2626]' : 'bg-[#38bdf8] text-gray-900 hover:bg-[#0ea5e9]'} disabled:opacity-50`}
+                  >
+                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    {isPlaying ? 'Pause' : 'Play'}
                   </button>
                 )}
-                <button onClick={() => { setLyrics([]); setSyncIndex(0); setRawLyricsText(""); setIsLyricsLocked(false); }} className="px-4 py-2 bg-[#0d0e12] border border-[#1f222b] text-[#ef4444] rounded text-xs font-bold hover:bg-[#ef4444]/10 transition-colors">Clear All</button>
+                <button 
+                  onClick={() => { setLyrics([]); setActiveWordIndex(0); setRawLyricsText(""); }} 
+                  className="px-4 py-2 bg-[#0d0e12] border border-[#1f222b] text-[#ef4444] rounded text-xs font-bold hover:bg-[#ef4444]/10 transition-colors"
+                >
+                  Clear All
+                </button>
               </div>
             </div>
             <div className="flex-1 p-6 overflow-hidden flex flex-col">
@@ -1005,9 +1041,18 @@ export default function KaraokeStudio() {
                   />
                   <button 
                     onClick={() => {
+                      let absIdx = 0;
                       const lines = rawLyricsText.split('\n').filter(l => l.trim() !== '');
-                      setLyrics(lines.map(text => ({ text, time: null })));
-                      setSyncIndex(0);
+                      setLyrics(lines.map(lineText => {
+                        const words = lineText.split(/\s+/).filter(w => w).map(w => ({
+                          text: w,
+                          start: null,
+                          end: null,
+                          absoluteIdx: absIdx++
+                        }));
+                        return { text: lineText, start: null, end: null, words };
+                      }));
+                      setActiveWordIndex(0);
                     }}
                     disabled={!rawLyricsText.trim()}
                     className="w-full py-3 bg-[#38bdf8] text-gray-900 rounded font-bold text-sm hover:bg-[#0ea5e9] transition-colors disabled:opacity-50"
@@ -1016,72 +1061,36 @@ export default function KaraokeStudio() {
                   </button>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto space-y-2 pr-4 custom-scrollbar">
-                  {lyrics.map((line, idx) => {
-                    const isSynced = line.time !== null;
-                    const isCurrentSync = idx === syncIndex;
-                    const isPlayingNow = isSynced && line.time! <= currentTime && (idx === lyrics.length - 1 || (lyrics[idx + 1].time === null || currentTime < lyrics[idx + 1].time!));
+                <div className="flex-1 overflow-y-auto space-y-8 pr-4 custom-scrollbar flex flex-col pt-32 pb-64">
+                  {lyrics.map((line, lIdx) => {
+                    const isLineActive = line.words.some(w => w.absoluteIdx === activeWordIndex);
                     
                     return (
                       <div 
-                        key={idx} 
-                        onClick={() => {
-                          if (isLyricsLocked) {
-                            if (isSynced) {
-                              setCurrentTime(line.time!);
-                              playPreview({
-                                ...mixSettings,
-                                trackVolume: effectiveTrackVolume,
-                                vocalVolume: effectiveVocalVolume
-                              }, line.time!);
-                            }
-                            return;
-                          }
-
-                          // Unlocked mode: clicking the row OVERWRITES the time with current playback time
-                          if (!isPlaying) {
-                            console.warn("Please hit play first to sync!");
-                            return;
-                          }
-                          setLyrics(prev => {
-                            const next = [...prev];
-                            next[idx] = { ...next[idx], time: currentTime };
-                            return next;
-                          });
-                          setSyncIndex(idx + 1);
-                        }}
-                        className={`flex items-center gap-4 p-3 rounded transition-all ${isLyricsLocked && isSynced ? 'cursor-pointer hover:bg-[#1f222b]' : !isLyricsLocked ? 'cursor-pointer hover:bg-[#1f222b]' : ''} ${isPlayingNow ? 'bg-[#38bdf8]/20 border border-[#38bdf8]/50' : isCurrentSync && !isLyricsLocked ? 'bg-[#1f222b] border border-[#3f3f46] shadow-sm' : 'border border-transparent'}`}
+                        key={lIdx} 
+                        className={`text-center w-full transition-all duration-300 ${isLineActive ? 'scale-110 opacity-100' : 'scale-100 opacity-40 hover:opacity-75'}`}
                       >
-                        <div 
-                          className={`w-16 shrink-0 text-right ${!isLyricsLocked && isSynced ? 'hover:opacity-75 cursor-pointer' : ''}`}
-                          title={!isLyricsLocked && isSynced ? "Click to jump to this time" : isLyricsLocked && isSynced ? "Click row to jump" : ""}
-                          onClick={(e) => {
-                            if (!isLyricsLocked && isSynced) {
-                              e.stopPropagation(); // Prevent the row click (which would overwrite the time)
-                              setCurrentTime(line.time!);
-                              playPreview({
-                                ...mixSettings,
-                                trackVolume: effectiveTrackVolume,
-                                vocalVolume: effectiveVocalVolume
-                              }, line.time!);
-                              setSyncIndex(idx);
-                            }
-                          }}
-                        >
-                          {isSynced ? (
-                            <span className="text-xs font-mono text-[#10b981] hover:underline underline-offset-2">{formatTime(line.time!)}</span>
-                          ) : (
-                            <span className="text-xs font-mono text-[#71717a]">--:--.-</span>
-                          )}
+                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-4">
+                          {line.words.map((w, wIdx) => {
+                            const isWordActiveTarget = w.absoluteIdx === activeWordIndex;
+                            const isWordSung = w.start !== null && currentTime >= w.start && (w.end === null || currentTime <= w.end);
+                            const isWordPast = w.end !== null && currentTime > w.end;
+                            
+                            let colorClass = 'text-[#71717a]'; // default unsynced
+                            if (isWordSung || (isSpacebarDown && isWordActiveTarget)) colorClass = 'text-[#38bdf8] drop-shadow-[0_0_8px_rgba(56,189,248,0.8)] scale-110 -translate-y-1'; 
+                            else if (isWordPast) colorClass = 'text-[#10b981]'; 
+                            else if (w.start !== null) colorClass = 'text-[#fafafa]'; 
+
+                            return (
+                              <span 
+                                key={wIdx} 
+                                className={`text-3xl md:text-5xl font-bold transition-all duration-150 inline-block ${colorClass} ${isWordActiveTarget ? 'border-b-4 border-[#fb7185] pb-1' : 'border-b-4 border-transparent pb-1'}`}
+                              >
+                                {w.text}
+                              </span>
+                            );
+                          })}
                         </div>
-                        <div className={`flex-1 text-sm transition-all ${isPlayingNow ? 'text-[#38bdf8] font-bold text-base' : isSynced ? 'text-[#fafafa]' : isCurrentSync ? 'text-white font-bold' : 'text-[#71717a]'}`}>
-                          {line.text}
-                        </div>
-                        {isCurrentSync && !isLyricsLocked && (
-                          <div className="text-[10px] font-bold text-[#fb7185] bg-[#fb7185]/10 px-2 py-1 rounded animate-pulse">
-                            NEXT TO SYNC
-                          </div>
-                        )}
                       </div>
                     );
                   })}
