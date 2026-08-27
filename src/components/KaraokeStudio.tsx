@@ -180,6 +180,7 @@ export default function KaraokeStudio() {
   const [lyrics, setLyrics] = useState<LineSync[]>([]);
   const [activeWordIndex, setActiveWordIndex] = useState(0);
   const [isSpacebarDown, setIsSpacebarDown] = useState(false);
+  const [isPainting, setIsPainting] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -637,11 +638,58 @@ export default function KaraokeStudio() {
 
     window.addEventListener("keydown", handleKeyDown, { capture: true });
     window.addEventListener("keyup", handleKeyUp, { capture: true });
+    
+    const handlePointerUp = () => setIsPainting(false);
+    window.addEventListener("pointerup", handlePointerUp);
+    
     return () => {
       window.removeEventListener("keydown", handleKeyDown, { capture: true });
       window.removeEventListener("keyup", handleKeyUp, { capture: true });
+      window.removeEventListener("pointerup", handlePointerUp);
     };
   }, [activeTab, isPlaying, activeWordIndex, lyrics, currentTime, isSpacebarDown]);
+
+  // Mouse Painting Logic
+  const handlePaintWord = (absIdx: number, isStarting: boolean) => {
+    if (!isPlaying) return;
+    if (isStarting) setIsPainting(true);
+    else if (!isPainting) return;
+    
+    setLyrics(prev => {
+      const next = JSON.parse(JSON.stringify(prev));
+      let flatIdx = 0;
+      
+      // End previous word if it exists
+      if (absIdx > 0) {
+        for (let i = 0; i < next.length; i++) {
+          for (let j = 0; j < next[i].words.length; j++) {
+            if (flatIdx === absIdx - 1) {
+              const cappedEnd = Math.min(currentTime, next[i].words[j].start! + 1.5);
+              next[i].words[j].end = cappedEnd;
+              if (j === next[i].words.length - 1) next[i].end = cappedEnd;
+            }
+            flatIdx++;
+          }
+        }
+      }
+
+      // Start current word
+      flatIdx = 0;
+      for (let i = 0; i < next.length; i++) {
+        for (let j = 0; j < next[i].words.length; j++) {
+          if (flatIdx === absIdx) {
+            next[i].words[j].start = currentTime;
+            next[i].words[j].end = currentTime + 0.8;
+            if (j === 0) next[i].start = currentTime;
+            if (j === next[i].words.length - 1) next[i].end = currentTime + 0.8;
+          }
+          flatIdx++;
+        }
+      }
+      return next;
+    });
+    setActiveWordIndex(absIdx + 1);
+  };
 
   return (
     <div className="min-h-screen bg-[#0d0e12] text-[#fafafa] font-sans flex flex-col overflow-hidden">
@@ -1034,8 +1082,8 @@ export default function KaraokeStudio() {
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">📝 Lyrics Studio</h2>
                 <p className="text-xs text-[#a1a1aa] mt-1">
-                  Hit Play, then use the <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Spacebar</kbd> like a rhythm game. <br/>
-                  Just <strong>Tap</strong> the spacebar for each word as the singer sings it. The lengths are calculated automatically!
+                  Hit Play, then use the <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Spacebar</kbd> like a rhythm game... <br/>
+                  <strong>OR</strong> simply <strong>click and drag your mouse</strong> across the text to paint the words in real-time as the singer sings them!
                 </p>
               </div>
               <div className="flex gap-2">
@@ -1088,7 +1136,7 @@ export default function KaraokeStudio() {
                   </button>
                 </div>
               ) : (
-                <div className="flex-1 overflow-y-auto space-y-8 pr-4 custom-scrollbar flex flex-col pt-32 pb-64">
+                <div className="flex-1 overflow-y-auto space-y-8 pr-4 custom-scrollbar flex flex-col pt-32 pb-64 select-none">
                   {lyrics.map((line, lIdx) => {
                     const isLineActive = line.words.some(w => w.absoluteIdx === activeWordIndex);
                     
@@ -1130,8 +1178,16 @@ export default function KaraokeStudio() {
                             return (
                               <span 
                                 key={wIdx} 
+                                onPointerDown={(e) => {
+                                  e.preventDefault();
+                                  handlePaintWord(w.absoluteIdx, true);
+                                }}
+                                onPointerEnter={(e) => {
+                                  e.preventDefault();
+                                  handlePaintWord(w.absoluteIdx, false);
+                                }}
                                 style={baseStyle}
-                                className={`text-3xl md:text-5xl font-bold transition-all duration-75 inline-block ${colorClass} ${isWordActiveTarget ? 'border-b-4 border-[#fb7185] pb-1' : 'border-b-4 border-transparent pb-1'}`}
+                                className={`cursor-crosshair text-3xl md:text-5xl font-bold transition-all duration-75 inline-block ${colorClass} ${isWordActiveTarget ? 'border-b-4 border-[#fb7185] pb-1' : 'border-b-4 border-transparent pb-1'}`}
                               >
                                 {w.text}
                               </span>
