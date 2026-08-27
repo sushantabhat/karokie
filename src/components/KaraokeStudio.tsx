@@ -471,7 +471,7 @@ export default function KaraokeStudio() {
   const [vocalMuted, setVocalMuted] = useState(false);
 
   const effectiveTrackVolume = trackMuted ? 0 : mixSettings.trackVolume;
-  const effectiveVocalVolume = vocalMuted ? 0 : mixSettings.vocalVolume;
+  const effectiveVocalVolume = vocalMuted || activeTab === 'LYRICS' ? 0 : mixSettings.vocalVolume;
 
   // Apply live volume changes when Mute state changes
   useEffect(() => {
@@ -945,16 +945,29 @@ export default function KaraokeStudio() {
             <div className="p-6 border-b border-[#1f222b] flex justify-between items-center shrink-0">
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">📝 Lyrics Studio</h2>
-                <p className="text-xs text-[#a1a1aa] mt-1">Paste your lyrics below, hit play, and simply <strong>tap any line</strong> (or hit <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Enter</kbd>) to sync it to the beat!</p>
+                <p className="text-xs text-[#a1a1aa] mt-1">
+                  Hit play, then <strong>tap any unsynced line</strong> (or hit <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Enter</kbd>) to sync it. <br/>
+                  <strong>Click a synced line</strong> to jump to that part of the song and resume syncing!
+                </p>
               </div>
               <div className="flex gap-2">
                 {lyrics.length > 0 && (
-                  <button 
-                    onClick={() => setIsLyricsLocked(!isLyricsLocked)} 
-                    className={`px-4 py-2 rounded text-xs font-bold transition-colors ${isLyricsLocked ? 'bg-[#3f3f46] text-white hover:bg-[#27272a]' : 'bg-[#10b981] text-white hover:bg-[#059669]'}`}
-                  >
-                    {isLyricsLocked ? '🔓 Unlock' : '🔒 Lock Lyrics'}
-                  </button>
+                  <>
+                    <button 
+                      onClick={handlePlayPreviewClick}
+                      disabled={!trackBuffer}
+                      className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-bold transition-colors ${isPlaying ? 'bg-[#ef4444] text-white hover:bg-[#dc2626]' : 'bg-[#38bdf8] text-gray-900 hover:bg-[#0ea5e9]'} disabled:opacity-50`}
+                    >
+                      {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                      {isPlaying ? 'Pause' : 'Play'}
+                    </button>
+                    <button 
+                      onClick={() => setIsLyricsLocked(!isLyricsLocked)} 
+                      className={`px-4 py-2 rounded text-xs font-bold transition-colors ${isLyricsLocked ? 'bg-[#3f3f46] text-white hover:bg-[#27272a]' : 'bg-[#10b981] text-white hover:bg-[#059669]'}`}
+                    >
+                      {isLyricsLocked ? '🔓 Unlock' : '🔒 Lock Lyrics'}
+                    </button>
+                  </>
                 )}
                 {!isLyricsLocked && (
                   <button 
@@ -1013,6 +1026,15 @@ export default function KaraokeStudio() {
                       <div 
                         key={idx} 
                         onClick={() => {
+                          if (isSynced) {
+                            handleSeekEnd(line.time!);
+                            if (!isLyricsLocked) {
+                              setSyncIndex(idx);
+                            }
+                            if (!isPlaying) handlePlayPreviewClick();
+                            return;
+                          }
+
                           if (isLyricsLocked) return;
                           if (!isPlaying) {
                             console.warn("Please hit play first to sync!");
@@ -1025,9 +1047,9 @@ export default function KaraokeStudio() {
                           });
                           setSyncIndex(idx + 1);
                         }}
-                        className={`flex items-center gap-4 p-3 rounded transition-all ${!isLyricsLocked && 'cursor-pointer hover:bg-[#1f222b]'} ${isPlayingNow ? 'bg-[#38bdf8]/20 border border-[#38bdf8]/50' : isCurrentSync && !isLyricsLocked ? 'bg-[#1f222b] border border-[#3f3f46] shadow-sm' : 'border border-transparent'}`}
+                        className={`flex items-center gap-4 p-3 rounded transition-all ${isSynced || !isLyricsLocked ? 'cursor-pointer hover:bg-[#1f222b]' : ''} ${isPlayingNow ? 'bg-[#38bdf8]/20 border border-[#38bdf8]/50' : isCurrentSync && !isLyricsLocked ? 'bg-[#1f222b] border border-[#3f3f46] shadow-sm' : 'border border-transparent'}`}
                       >
-                        <div className="w-16 shrink-0 text-right">
+                        <div className="w-16 shrink-0 text-right" title={isSynced ? "Click to play from here" : ""}>
                           {isSynced ? (
                             <span className="text-xs font-mono text-[#10b981]">{formatTime(line.time!)}</span>
                           ) : (
