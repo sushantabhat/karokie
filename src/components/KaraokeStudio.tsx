@@ -129,7 +129,12 @@ const loadLyricsFromLocalStorage = (hash: string) => {
   const data = localStorage.getItem(`lyrics-autosave-${hash}`);
   if (!data) return null;
   try {
-    return JSON.parse(data);
+    const parsed = JSON.parse(data);
+    if (parsed && parsed.length > 0 && !parsed[0].words) {
+      localStorage.removeItem(`lyrics-autosave-${hash}`);
+      return null;
+    }
+    return parsed;
   } catch {
     // Corrupt entry - clean it up
     localStorage.removeItem(`lyrics-autosave-${hash}`);
