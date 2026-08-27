@@ -946,8 +946,8 @@ export default function KaraokeStudio() {
               <div>
                 <h2 className="text-lg font-bold text-white flex items-center gap-2">📝 Lyrics Studio</h2>
                 <p className="text-xs text-[#a1a1aa] mt-1">
-                  Hit play, then <strong>tap any unsynced line</strong> (or hit <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Enter</kbd>) to sync it. <br/>
-                  <strong>Click a synced line</strong> to jump to that part of the song and resume syncing!
+                  Hit play, then <strong>tap any line's text</strong> (or hit <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Enter</kbd>) to sync/overwrite it to the current time. <br/>
+                  <strong>Click a green timestamp</strong> to jump playback to that part of the song!
                 </p>
               </div>
               <div className="flex gap-2">
@@ -1026,16 +1026,19 @@ export default function KaraokeStudio() {
                       <div 
                         key={idx} 
                         onClick={() => {
-                          if (isSynced) {
-                            handleSeekEnd(line.time!);
-                            if (!isLyricsLocked) {
-                              setSyncIndex(idx);
+                          if (isLyricsLocked) {
+                            if (isSynced) {
+                              setCurrentTime(line.time!);
+                              playPreview({
+                                ...mixSettings,
+                                trackVolume: effectiveTrackVolume,
+                                vocalVolume: effectiveVocalVolume
+                              }, line.time!);
                             }
-                            if (!isPlaying) handlePlayPreviewClick();
                             return;
                           }
 
-                          if (isLyricsLocked) return;
+                          // Unlocked mode: clicking the row OVERWRITES the time with current playback time
                           if (!isPlaying) {
                             console.warn("Please hit play first to sync!");
                             return;
@@ -1047,11 +1050,26 @@ export default function KaraokeStudio() {
                           });
                           setSyncIndex(idx + 1);
                         }}
-                        className={`flex items-center gap-4 p-3 rounded transition-all ${isSynced || !isLyricsLocked ? 'cursor-pointer hover:bg-[#1f222b]' : ''} ${isPlayingNow ? 'bg-[#38bdf8]/20 border border-[#38bdf8]/50' : isCurrentSync && !isLyricsLocked ? 'bg-[#1f222b] border border-[#3f3f46] shadow-sm' : 'border border-transparent'}`}
+                        className={`flex items-center gap-4 p-3 rounded transition-all ${isLyricsLocked && isSynced ? 'cursor-pointer hover:bg-[#1f222b]' : !isLyricsLocked ? 'cursor-pointer hover:bg-[#1f222b]' : ''} ${isPlayingNow ? 'bg-[#38bdf8]/20 border border-[#38bdf8]/50' : isCurrentSync && !isLyricsLocked ? 'bg-[#1f222b] border border-[#3f3f46] shadow-sm' : 'border border-transparent'}`}
                       >
-                        <div className="w-16 shrink-0 text-right" title={isSynced ? "Click to play from here" : ""}>
+                        <div 
+                          className={`w-16 shrink-0 text-right ${!isLyricsLocked && isSynced ? 'hover:opacity-75 cursor-pointer' : ''}`}
+                          title={!isLyricsLocked && isSynced ? "Click to jump to this time" : isLyricsLocked && isSynced ? "Click row to jump" : ""}
+                          onClick={(e) => {
+                            if (!isLyricsLocked && isSynced) {
+                              e.stopPropagation(); // Prevent the row click (which would overwrite the time)
+                              setCurrentTime(line.time!);
+                              playPreview({
+                                ...mixSettings,
+                                trackVolume: effectiveTrackVolume,
+                                vocalVolume: effectiveVocalVolume
+                              }, line.time!);
+                              setSyncIndex(idx);
+                            }
+                          }}
+                        >
                           {isSynced ? (
-                            <span className="text-xs font-mono text-[#10b981]">{formatTime(line.time!)}</span>
+                            <span className="text-xs font-mono text-[#10b981] hover:underline underline-offset-2">{formatTime(line.time!)}</span>
                           ) : (
                             <span className="text-xs font-mono text-[#71717a]">--:--.-</span>
                           )}
