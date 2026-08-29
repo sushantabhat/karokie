@@ -1,9 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
-import WaveformEditor from "./WaveformEditor";
-
-import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2, Volume2, Mic2, RotateCcw, Target, Plus, Minus, Save } from 'lucide-react';
+import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2, Volume2, Mic2, RotateCcw, Target, Plus, Minus } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 import { saveTrackToDB, getTrackFromDB, saveVocalToDB, getVocalFromDB } from '@/utils/indexedDB';
@@ -124,14 +122,15 @@ const hashFile = async (file: File): Promise<string> => {
   return hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
 };
 
-export type LineSync = { id: string; text: string; start: number | null; end: number | null; };
+export type WordSync = { text: string; start: number | null; end: number | null; absoluteIdx: number };
+export type LineSync = { text: string; start: number | null; end: number | null; words: WordSync[] };
 
 const loadLyricsFromLocalStorage = (hash: string) => {
   const data = localStorage.getItem(`lyrics-autosave-${hash}`);
   if (!data) return null;
   try {
     const parsed = JSON.parse(data);
-    if (parsed && parsed.length > 0 && !parsed[0].id) {
+    if (parsed && parsed.length > 0 && !parsed[0].words) {
       localStorage.removeItem(`lyrics-autosave-${hash}`);
       return null;
     }
@@ -175,14 +174,12 @@ export default function KaraokeStudio() {
     trackBuffer, vocalBuffer 
   } = useAudioMixer();
 
-  type Tab = "MIXER" | "SYNC" | "EDIT";
+  type Tab = "MIXER" | "LYRICS";
   const [activeTab, setActiveTab] = useState<Tab>("MIXER");
-  const [activeLineIndex, setActiveLineIndex] = useState(0);
-  const [isSpacebarDown, setIsSpacebarDown] = useState(false);
-
   const [rawLyricsText, setRawLyricsText] = useState("");
   const [lyrics, setLyrics] = useState<LineSync[]>([]);
   const [activeWordIndex, setActiveWordIndex] = useState(0);
+  const [isSpacebarDown, setIsSpacebarDown] = useState(false);
   const [isPainting, setIsPainting] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   
@@ -327,12 +324,12 @@ export default function KaraokeStudio() {
               const time = mins * 60 + secs;
               const txt = match[3].trim();
               const words = txt.split(/\s+/).filter(w => w).map(w => ({ text: w, start: null, end: null, absoluteIdx: absIdx++ }));
-              return { id: "line-" + Date.now() + "-" + Math.random(), text: txt, start: time, end: null } as LineSync;
+              return { text: txt, start: time, end: null, words } as LineSync;
             }
             const txt = line.trim();
             if (txt) {
                const words = txt.split(/\s+/).filter(w => w).map(w => ({ text: w, start: null, end: null, absoluteIdx: absIdx++ }));
-               return { id: "line-" + Date.now() + "-" + Math.random(), text: txt, start: null, end: null } as LineSync;
+               return { text: txt, start: null, end: null, words } as LineSync;
             }
             return null;
           })
@@ -489,7 +486,7 @@ export default function KaraokeStudio() {
   const [vocalMuted, setVocalMuted] = useState(false);
 
   const effectiveTrackVolume = trackMuted ? 0 : mixSettings.trackVolume;
-  const effectiveVocalVolume = vocalMuted || (activeTab === 'SYNC' || activeTab === 'EDIT') ? 0 : mixSettings.vocalVolume;
+  const effectiveVocalVolume = vocalMuted || activeTab === 'LYRICS' ? 0 : mixSettings.vocalVolume;
 
   // Apply live volume changes when Mute state changes
   useEffect(() => {
@@ -579,100 +576,120 @@ export default function KaraokeStudio() {
     }
   };
 
-  const handleLineUpdate = (id: string, newStart: number, newEnd: number) => {
+  // Spacebar Syncing Logic (Tap-Only Word by Word)
+  useEffect(() => {
+    const totalWords = lyrics.reduce((acc, line) => acc + line.words.length, 0);
+
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (activeTab === "LYRICS" && e.code === "Space") {
+        const activeTag = document.activeElement?.tagName;
+        if (activeTag === 'INPUT' || activeTag === 'TEXTAREA') return;
+        
+        e.preventDefault(); 
+        if (!isPlaying || isSpacebarDown) return;
+        setIsSpacebarDown(true);
+
+        if (activeWordIndex < totalWords) {
+          setLyrics(prev => {
+            const next = JSON.parse(JSON.stringify(prev)); // Deep copy for nested mutability
+            let flatIdx = 0;
+            
+            // 1. End the previous word
+            if (activeWordIndex > 0) {
+              for (let i = 0; i < next.length; i++) {
+                for (let j = 0; j < next[i].words.length; j++) {
+                  if (flatIdx === activeWordIndex - 1) {
+                    // Cap the previous word's duration if the gap is too long (e.g. max 1.5s)
+                    const cappedEnd = Math.min(currentTime, next[i].words[j].start! + 1.5);
+                    next[i].words[j].end = cappedEnd;
+                    if (j === next[i].words.length - 1) next[i].end = cappedEnd;
+                  }
+                  flatIdx++;
+                }
+              }
+            }
+
+            // 2. Start the current word
+            flatIdx = 0;
+            for (let i = 0; i < next.length; i++) {
+              for (let j = 0; j < next[i].words.length; j++) {
+                if (flatIdx === activeWordIndex) {
+                  next[i].words[j].start = currentTime;
+                  // Provide a default end time just in case this is the last word they tap
+                  next[i].words[j].end = currentTime + 0.8;
+                  if (j === 0) next[i].start = currentTime; // line start
+                  if (j === next[i].words.length - 1) next[i].end = currentTime + 0.8; 
+                }
+                flatIdx++;
+              }
+            }
+            return next;
+          });
+          setActiveWordIndex(prev => prev + 1);
+        }
+      }
+    };
+
+    const handleKeyUp = (e: KeyboardEvent) => {
+      if (activeTab === "LYRICS" && e.code === "Space") {
+        setIsSpacebarDown(false);
+      }
+    };
+
+    window.addEventListener("keydown", handleKeyDown, { capture: true });
+    window.addEventListener("keyup", handleKeyUp, { capture: true });
+    
+    const handlePointerUp = () => setIsPainting(false);
+    window.addEventListener("pointerup", handlePointerUp);
+    
+    return () => {
+      window.removeEventListener("keydown", handleKeyDown, { capture: true });
+      window.removeEventListener("keyup", handleKeyUp, { capture: true });
+      window.removeEventListener("pointerup", handlePointerUp);
+    };
+  }, [activeTab, isPlaying, activeWordIndex, lyrics, currentTime, isSpacebarDown]);
+
+  // Mouse Painting Logic
+  const handlePaintWord = (absIdx: number, isStarting: boolean) => {
+    if (!isPlaying) return;
+    if (isStarting) setIsPainting(true);
+    else if (!isPainting) return;
+    
     setLyrics(prev => {
-      const next = [...prev];
-      const idx = next.findIndex(l => l.id === id);
-      if (idx === -1) return prev;
-
-      let adjustedStart = newStart;
-      let adjustedEnd = newEnd;
+      const next = JSON.parse(JSON.stringify(prev));
+      let flatIdx = 0;
       
-      // Ensure the line itself doesn't invert
-      if (adjustedStart >= adjustedEnd - 0.1) {
-         // keep it a minimum of 100ms
-         adjustedStart = adjustedEnd - 0.1;
-      }
-
-      const updated = { ...next[idx], start: adjustedStart, end: adjustedEnd };
-      next[idx] = updated;
-      
-      // Magnetic overlap - Top (Previous Line)
-      if (idx > 0) {
-        const prevLine = next[idx - 1];
-        // If we drag start to the left of prevLine's end
-        if (prevLine.start !== null && prevLine.end !== null && adjustedStart < prevLine.end) {
-          // Push prevLine's end back, but don't let it crush completely (keep min 100ms)
-          const newPrevEnd = Math.max(prevLine.start + 0.1, adjustedStart);
-          next[idx - 1] = { ...prevLine, end: newPrevEnd };
-          
-          // If we pushed it so hard that we hit its start, we should ideally push its start too...
-          // But for a simple casual editor, just bounding the end is usually enough.
-          // To be totally solid, we adjust the start as well if we crushed it:
-          if (adjustedStart <= prevLine.start + 0.1) {
-            next[idx - 1] = { ...next[idx-1], start: adjustedStart - 0.1 };
+      // End previous word if it exists
+      if (absIdx > 0) {
+        for (let i = 0; i < next.length; i++) {
+          for (let j = 0; j < next[i].words.length; j++) {
+            if (flatIdx === absIdx - 1) {
+              const cappedEnd = Math.min(currentTime, next[i].words[j].start! + 1.5);
+              next[i].words[j].end = cappedEnd;
+              if (j === next[i].words.length - 1) next[i].end = cappedEnd;
+            }
+            flatIdx++;
           }
         }
       }
 
-      // Magnetic overlap - Bottom (Next Line)
-      if (idx < next.length - 1) {
-        const nextLine = next[idx + 1];
-        // If we drag end to the right of nextLine's start
-        if (nextLine.start !== null && nextLine.end !== null && adjustedEnd > nextLine.start) {
-          // Push nextLine's start forward
-          const newNextStart = Math.min(nextLine.end - 0.1, adjustedEnd);
-          next[idx + 1] = { ...nextLine, start: newNextStart };
-          
-          // If we pushed it so hard we hit its end:
-          if (adjustedEnd >= nextLine.end - 0.1) {
-             next[idx + 1] = { ...next[idx+1], end: adjustedEnd + 0.1 };
+      // Start current word
+      flatIdx = 0;
+      for (let i = 0; i < next.length; i++) {
+        for (let j = 0; j < next[i].words.length; j++) {
+          if (flatIdx === absIdx) {
+            next[i].words[j].start = currentTime;
+            next[i].words[j].end = currentTime + 0.8;
+            if (j === 0) next[i].start = currentTime;
+            if (j === next[i].words.length - 1) next[i].end = currentTime + 0.8;
           }
+          flatIdx++;
         }
       }
-
       return next;
     });
+    setActiveWordIndex(absIdx + 1);
   };
-
-  // Spacebar Logic (Tap to advance)
-  useEffect(() => {
-    const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && e.target === document.body && activeTab === "SYNC") {
-        e.preventDefault();
-        if (e.repeat) return;
-        
-        setIsSpacebarDown(true);
-        setTimeout(() => setIsSpacebarDown(false), 150); // visual flash
-        
-        setLyrics(prev => {
-           const next = [...prev];
-           const currIdx = activeLineIndex;
-           
-           if (currIdx < next.length) {
-              // Start current line
-              next[currIdx] = { ...next[currIdx], start: currentTime };
-           }
-           
-           if (currIdx > 0 && currIdx <= next.length) {
-              // End previous line
-              next[currIdx - 1] = { ...next[currIdx - 1], end: currentTime };
-           }
-           
-           return next;
-        });
-        
-        if (activeLineIndex <= lyrics.length) {
-          setActiveLineIndex(idx => idx + 1);
-        }
-      }
-    };
-
-    window.addEventListener('keydown', handleKeyDown);
-    return () => {
-      window.removeEventListener('keydown', handleKeyDown);
-    };
-  }, [activeLineIndex, activeTab, currentTime, lyrics.length]);
 
   return (
     <div className="min-h-screen bg-[#0d0e12] text-[#fafafa] font-sans flex flex-col overflow-hidden">
@@ -689,8 +706,7 @@ export default function KaraokeStudio() {
           {/* VIEW TOGGLE */}
           <div className="flex bg-[#0d0e12] p-1 rounded-md border border-[#1f222b]">
             <button onClick={() => setActiveTab("MIXER")} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "MIXER" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎛️ Mixer</button>
-            <button onClick={() => setActiveTab("SYNC")} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "SYNC" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎮 Sync</button>
-            <button onClick={() => setActiveTab("EDIT")} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "EDIT" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>✂️ Edit</button>
+            <button onClick={() => setActiveTab("LYRICS")} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "LYRICS" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>📝 Lyrics</button>
           </div>
           <div className="h-6 w-px bg-[#1f222b] mx-2" />
 
@@ -759,7 +775,7 @@ export default function KaraokeStudio() {
                 📤 Upload Track
               </button>
             )}
-            {(activeTab === "SYNC" || activeTab === "EDIT") && (
+            {activeTab === "LYRICS" && (
               <>
                 <button
                   onClick={() => document.getElementById('lrc-upload')?.click()}
@@ -796,11 +812,11 @@ export default function KaraokeStudio() {
           <div className="max-w-6xl mx-auto space-y-6">
             
             {/* TELEPROMPTER */}
-            {lyrics.some(l => l.start !== null) && (
+            {lyrics.some(l => l.start !== null || l.words.some(w => w.start !== null)) && (
               (() => {
                 let currentIdx = -1;
                 for (let i = lyrics.length - 1; i >= 0; i--) {
-                  const lineStart = lyrics[i].start;
+                  const lineStart = lyrics[i].start ?? lyrics[i].words.find(w => w.start !== null)?.start;
                   if (lineStart !== undefined && lineStart !== null && lineStart <= currentTime) {
                     currentIdx = i;
                     break;
@@ -819,30 +835,37 @@ export default function KaraokeStudio() {
                 return (
                   <div className="bg-[#16181f] border border-[#1f222b] rounded-lg p-6 flex flex-col items-center justify-center min-h-[120px] shadow-sm">
                     <div className="flex flex-wrap justify-center gap-x-2">
-                      {currentLine ? (() => {
+                      {currentLine ? currentLine.words.map((w, i) => {
+                        const isWordSung = w.start !== null && currentTime >= w.start && (w.end === null || currentTime <= w.end);
+                        const isWordPast = w.end !== null && currentTime > w.end;
+                        
                         let progress = 0;
-                        if (currentLine.start !== null && currentLine.end !== null && currentTime >= currentLine.start) {
-                          if (currentTime >= currentLine.end) {
-                            progress = 100;
-                          } else {
-                            progress = ((currentTime - currentLine.start) / (currentLine.end - currentLine.start)) * 100;
-                          }
+                        if (isWordSung && w.end && w.end > w.start!) {
+                           progress = Math.min(100, Math.max(0, ((currentTime - w.start!) / (w.end - w.start!)) * 100));
+                        } else if (isWordPast) {
+                           progress = 100;
                         }
+
+                        let baseStyle: React.CSSProperties = {};
+                        let colorClass = 'text-[#71717a]'; 
+                        
+                        if (isWordSung || isWordPast) {
+                          colorClass = 'drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]';
+                          baseStyle = {
+                            backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`,
+                            WebkitBackgroundClip: 'text',
+                            WebkitTextFillColor: 'transparent',
+                            backgroundClip: 'text',
+                            color: 'transparent'
+                          };
+                        }
+
                         return (
-                          <span
-                            className="mx-1 text-4xl md:text-5xl font-black drop-shadow-[0_0_8px_rgba(56,189,248,0.3)] transition-colors"
-                            style={{
-                              backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`,
-                              WebkitBackgroundClip: 'text',
-                              WebkitTextFillColor: 'transparent',
-                              display: 'inline-block',
-                              lineHeight: '1.4'
-                            }}
-                          >
-                            {currentLine.text}
+                          <span key={i} style={baseStyle} className={`text-2xl md:text-3xl font-black tracking-tight ${colorClass}`}>
+                            {w.text}
                           </span>
                         );
-                      })() : (
+                      }) : (
                         <span className="text-3xl font-black text-[#71717a] text-center drop-shadow-md tracking-tight">
                           {currentText}
                         </span>
@@ -1054,89 +1077,133 @@ export default function KaraokeStudio() {
           </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-h-0 bg-[#0d0e12] overflow-hidden p-4 gap-4">
-            {lyrics.length === 0 ? (
-              <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full pt-8">
-                <label className="text-sm font-bold text-gray-400 mb-2">Paste Lyrics</label>
-                <textarea
-                  value={rawLyricsText}
-                  onChange={e => setRawLyricsText(e.target.value)}
-                  className="flex-1 bg-[#16181f] text-gray-200 p-4 rounded border border-[#1f222b] focus:outline-none focus:border-[#38bdf8] resize-none"
-                  placeholder="Paste lyrics here..."
-                />
+          <div className="max-w-4xl mx-auto h-full flex flex-col bg-[#16181f] border border-[#1f222b] rounded-lg shadow-sm">
+            <div className="p-6 border-b border-[#1f222b] flex justify-between items-center shrink-0">
+              <div>
+                <h2 className="text-lg font-bold text-white flex items-center gap-2">📝 Lyrics Studio</h2>
+                <p className="text-xs text-[#a1a1aa] mt-1">
+                  Hit Play, then use the <kbd className="bg-[#1f222b] px-1.5 py-0.5 rounded border border-[#3f3f46]">Spacebar</kbd> like a rhythm game... <br/>
+                  <strong>OR</strong> simply <strong>click and drag your mouse</strong> across the text to paint the words in real-time as the singer sings them!
+                </p>
+              </div>
+              <div className="flex gap-2">
+                {lyrics.length > 0 && (
+                  <button 
+                    onClick={handlePlayPreviewClick}
+                    disabled={!trackBuffer}
+                    className={`flex items-center gap-1.5 px-4 py-2 rounded text-xs font-bold transition-colors ${isPlaying ? 'bg-[#ef4444] text-white hover:bg-[#dc2626]' : 'bg-[#38bdf8] text-gray-900 hover:bg-[#0ea5e9]'} disabled:opacity-50`}
+                  >
+                    {isPlaying ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
+                    {isPlaying ? 'Pause' : 'Play'}
+                  </button>
+                )}
                 <button 
-                  onClick={() => {
-                    const lines = rawLyricsText.split('\n').map(l => l.trim()).filter(l => l);
-                    setLyrics(lines.map((text, idx) => ({ id: `line-${Date.now()}-${idx}`, text, start: null, end: null })));
-                  }}
-                  className="w-full mt-4 py-3 bg-[#38bdf8] text-gray-900 rounded font-bold hover:bg-[#0ea5e9] transition-colors"
+                  onClick={() => { setLyrics([]); setActiveWordIndex(0); setRawLyricsText(""); }} 
+                  className="px-4 py-2 bg-[#0d0e12] border border-[#1f222b] text-[#ef4444] rounded text-xs font-bold hover:bg-[#ef4444]/10 transition-colors"
                 >
-                  Generate Timeline
+                  Clear All
                 </button>
               </div>
-            ) : activeTab === "SYNC" ? (
-              <div className="flex-1 flex flex-col h-full gap-4 min-h-0">
-                <div className="flex flex-col items-center justify-center py-2 gap-4">
-                  <div className="text-sm font-bold text-[#71717a]">
-                    Tap <kbd className="bg-[#1f222b] px-2 py-1 rounded text-white mx-1">Spacebar</kbd> to start the next line.
-                  </div>
-                  <div className="flex gap-4">
-                    <button 
-                      onClick={handlePlayPauseClick}
-                      disabled={!trackUrl}
-                      className={`flex items-center gap-2 px-6 py-3 rounded-full font-black text-sm transition-transform hover:scale-105 ${isPlaying ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'} disabled:opacity-50`}
-                    >
-                      {isPlaying ? '⏸ PAUSE' : '▶ PLAY SONG'}
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (audioRef.current) audioRef.current.currentTime = 0;
-                        setCurrentTime(0);
-                        setActiveLineIndex(0);
-                        setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null })));
-                      }}
-                      className="flex items-center gap-2 px-6 py-3 bg-[#1f222b] hover:bg-[#272a35] text-white rounded-full font-bold text-sm transition-colors"
-                    >
-                      🔄 Restart Sync
-                    </button>
-                  </div>
+            </div>
+            <div className="flex-1 p-6 overflow-hidden flex flex-col">
+              {lyrics.length === 0 ? (
+                <div className="flex-1 flex flex-col">
+                  <textarea 
+                    value={rawLyricsText} 
+                    onChange={e => setRawLyricsText(e.target.value)} 
+                    placeholder="Paste your plain text lyrics here..." 
+                    className="flex-1 w-full bg-[#0d0e12] border border-[#1f222b] rounded p-4 text-sm text-[#fafafa] font-mono outline-none focus:border-[#38bdf8] resize-none mb-4"
+                  />
+                  <button 
+                    onClick={() => {
+                      let absIdx = 0;
+                      const lines = rawLyricsText.split('\n').filter(l => l.trim() !== '');
+                      setLyrics(lines.map(lineText => {
+                        const words = lineText.split(/\s+/).filter(w => w).map(w => ({
+                          text: w,
+                          start: null,
+                          end: null,
+                          absoluteIdx: absIdx++
+                        }));
+                        return { text: lineText, start: null, end: null, words };
+                      }));
+                      setActiveWordIndex(0);
+                    }}
+                    disabled={!rawLyricsText.trim()}
+                    className="w-full py-3 bg-[#38bdf8] text-gray-900 rounded font-bold text-sm hover:bg-[#0ea5e9] transition-colors disabled:opacity-50"
+                  >
+                    Start Syncing Mode
+                  </button>
                 </div>
-                <div className={`flex-1 overflow-y-auto custom-scrollbar bg-[#16181f] rounded border border-[#1f222b] p-8 flex flex-col items-center relative transition-colors ${isSpacebarDown ? 'border-[#38bdf8] bg-[#38bdf8]/5' : ''}`}>
-                   <div className="absolute top-4 right-4 flex gap-2">
-                     <button onClick={() => { setLyrics([]); setRawLyricsText(""); setActiveLineIndex(0); setIsSpacebarDown(false); }} className="px-3 py-1 bg-red-500/10 text-red-500 text-xs font-bold rounded hover:bg-red-500/20 transition-colors">Clear All</button>
-                   </div>
-                   {lyrics.map((line) => {
-                      let progress = 0;
-                      if (line.start !== null && line.end !== null && currentTime >= line.start) {
-                        if (currentTime >= line.end) {
-                          progress = 100;
-                        } else {
-                          progress = ((currentTime - line.start) / (line.end - line.start)) * 100;
-                        }
-                      }
-                      const isTarget = activeLineIndex === lyrics.indexOf(line);
-                      return (
-                        <div key={line.id} className={`text-2xl md:text-4xl font-black mb-8 transition-all ${isTarget ? 'scale-110 drop-shadow-[0_0_15px_rgba(56,189,248,0.5)]' : 'opacity-70'}`} style={{ backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                          {line.text}
+              ) : (
+                <div className="flex-1 overflow-y-auto space-y-8 pr-4 custom-scrollbar flex flex-col pt-32 pb-64 select-none">
+                  {lyrics.map((line, lIdx) => {
+                    const isLineActive = line.words.some(w => w.absoluteIdx === activeWordIndex);
+                    
+                    return (
+                      <div 
+                        key={lIdx} 
+                        className={`text-center w-full transition-all duration-300 ${isLineActive ? 'scale-110 opacity-100' : 'scale-100 opacity-40 hover:opacity-75'}`}
+                      >
+                        <div className="flex flex-wrap justify-center gap-x-3 gap-y-4">
+                          {line.words.map((w, wIdx) => {
+                            const isWordActiveTarget = w.absoluteIdx === activeWordIndex;
+                            const isWordSung = w.start !== null && currentTime >= w.start && (w.end === null || currentTime <= w.end);
+                            const isWordPast = w.end !== null && currentTime > w.end;
+                            
+                            let progress = 0;
+                            if (isWordSung && w.end && w.end > w.start!) {
+                               progress = Math.min(100, Math.max(0, ((currentTime - w.start!) / (w.end - w.start!)) * 100));
+                            } else if (isWordPast) {
+                               progress = 100;
+                            }
+                            
+                            let baseStyle: React.CSSProperties = {};
+                            let colorClass = 'text-[#71717a]'; // default unsynced
+                            
+                            if (isWordSung || isWordPast) {
+                              colorClass = 'drop-shadow-[0_0_8px_rgba(56,189,248,0.3)]';
+                              if (isWordSung) colorClass += ' scale-110 -translate-y-1';
+                              baseStyle = {
+                                backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`,
+                                WebkitBackgroundClip: 'text',
+                                WebkitTextFillColor: 'transparent',
+                                backgroundClip: 'text',
+                                color: 'transparent'
+                              };
+                            } else if (w.start !== null) {
+                              colorClass = 'text-[#fafafa]'; 
+                            }
+
+                            return (
+                              <span 
+                                key={wIdx} 
+                                onPointerDown={(e) => {
+                                  e.preventDefault();
+                                  handlePaintWord(w.absoluteIdx, true);
+                                }}
+                                onPointerEnter={(e) => {
+                                  e.preventDefault();
+                                  handlePaintWord(w.absoluteIdx, false);
+                                }}
+                                style={baseStyle}
+                                className={`cursor-crosshair text-3xl md:text-5xl font-bold transition-all duration-75 inline-block ${colorClass} ${isWordActiveTarget ? 'border-b-4 border-[#fb7185] pb-1' : 'border-b-4 border-transparent pb-1'}`}
+                              >
+                                {w.text}
+                              </span>
+                            );
+                          })}
                         </div>
-                      );
-                   })}
+                      </div>
+                    );
+                  })}
                 </div>
-              </div>
-            ) : (
-              <div className="flex-1 flex flex-col h-full min-h-0">
-                <div className="text-center text-sm font-bold text-[#71717a] py-2 mb-2">
-                  Drag the blocks or the left/right handles to fine-tune the timing.
-                </div>
-                <div className="flex-1 shrink-0 bg-[#0d0e12] rounded border border-[#1f222b]">
-                  <WaveformEditor trackUrl={trackUrl!} lyrics={lyrics} onUpdateLine={handleLineUpdate} />
-                </div>
-              </div>
-            )}
+              )}
+            </div>
           </div>
         )}
       </div>
-
+      
       {/* Hidden audio element for synchronized playback DURING recording */}
       {trackUrl && (
         <audio 
