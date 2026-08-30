@@ -1003,14 +1003,14 @@ export default function KaraokeStudio() {
         {/* RIGHT SIDE: Transport & Actions */}
         <div className="flex items-center md:items-center flex-wrap md:flex-nowrap gap-x-4 md:gap-x-6 gap-y-2 justify-between">
           {/* Transport Controls */}
-          <div className="flex items-center gap-3 bg-transparent p-1.5 rounded-full border border-edge/20 light:border-edge">
+          <div className="flex items-center gap-1 bg-transparent p-1.5 rounded-full border border-edge/20 light:border-edge">
             <button 
               onClick={handlePlayPauseClick} 
               disabled={isRecording || !trackBuffer}
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                 (isPlaying)
-                  ? 'bg-[#10b981] text-foreground shadow-[0_0_10px_rgba(16,185,129,0.4)]'
-                  : 'bg-control text-[#10b981] border border-edge hover:bg-[#10b981] hover:text-foreground disabled:opacity-50 disabled:pointer-events-none'
+                  ? 'bg-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                  : 'bg-transparent text-[#10b981] hover:bg-control hover:text-[#10b981] disabled:opacity-50 disabled:pointer-events-none'
               }`}
               title="Play/Pause"
             >
@@ -1023,7 +1023,7 @@ export default function KaraokeStudio() {
               className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                 isRecording 
                   ? 'bg-transparent border-2 border-[#ef4444] shadow-[0_0_15px_rgba(239,68,68,0.7)] animate-pulse' 
-                  : 'bg-control text-[#ef4444] border border-edge hover:bg-[#ef4444]/20 disabled:opacity-50 disabled:pointer-events-none'
+                  : 'bg-transparent text-[#ef4444] hover:bg-control disabled:opacity-50 disabled:pointer-events-none'
               }`}
               title="Record"
             >
@@ -1033,7 +1033,7 @@ export default function KaraokeStudio() {
             <button 
               onClick={handleStopClick}
               disabled={!isRecording && !isPlaying && currentTime === 0}
-              className="w-10 h-10 rounded-full bg-control text-muted border border-edge hover:bg-control-hover hover:text-foreground flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              className="w-10 h-10 rounded-full bg-transparent text-muted hover:bg-control hover:text-foreground flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none"
               title="Stop"
             >
               <Square className="w-3 h-3 fill-current" />
@@ -1042,7 +1042,7 @@ export default function KaraokeStudio() {
 
             <button 
               onClick={toggleTheme}
-              className="w-10 h-10 shrink-0 rounded-full bg-control text-muted border border-edge hover:text-foreground hover:bg-control-hover flex items-center justify-center transition-colors"
+              className="w-10 h-10 shrink-0 rounded-full bg-transparent border border-edge/20 light:border-edge text-muted hover:text-foreground hover:bg-control flex items-center justify-center transition-colors"
               title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
             >
               {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
