@@ -44,24 +44,24 @@ export function DraftsModal({ onClose, onLoad }: DraftsModalProps) {
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm p-4">
-      <div className="bg-[#161B22] border border-white/10 rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
-        <div className="flex items-center justify-between p-6 border-b border-white/10">
-          <h2 className="text-xl font-bold text-white flex items-center gap-2">
+      <div className="bg-panel border border-edge/20 light:border-edge rounded-2xl w-full max-w-md shadow-2xl overflow-hidden flex flex-col">
+        <div className="flex items-center justify-between p-6 border-b border-edge/20 light:border-edge">
+          <h2 className="text-xl font-bold text-foreground flex items-center gap-2">
             <FolderOpen className="w-5 h-5" />
             My Drafts
           </h2>
-          <button onClick={onClose} className="text-[#a1a1aa] hover:text-white transition-colors">
+          <button onClick={onClose} className="text-muted hover:text-foreground transition-colors">
             <X className="w-5 h-5" />
           </button>
         </div>
         
         <div className="p-6">
           <div className="flex items-center justify-between mb-4">
-            <span className="text-sm font-medium text-[#71717a]">Storage Usage</span>
-            <span className="text-sm font-bold text-white">{drafts.length} / 3 Slots Used</span>
+            <span className="text-sm font-medium text-secondary">Storage Usage</span>
+            <span className="text-sm font-bold text-foreground">{drafts.length} / 3 Slots Used</span>
           </div>
           
-          <div className="w-full bg-white/5 rounded-full h-2 mb-6 overflow-hidden">
+          <div className="w-full bg-control rounded-full h-2 mb-6 overflow-hidden">
             <div 
               className={`h-full rounded-full transition-all ${drafts.length === 3 ? 'bg-red-500' : 'bg-[#1db954]'}`} 
               style={{ width: `${(drafts.length / 3) * 100}%` }} 
@@ -70,24 +70,24 @@ export function DraftsModal({ onClose, onLoad }: DraftsModalProps) {
 
           <div className="space-y-3">
             {loading ? (
-              <div className="text-center text-[#71717a] py-4">Loading drafts...</div>
+              <div className="text-center text-secondary py-4">Loading drafts...</div>
             ) : drafts.length === 0 ? (
-              <div className="text-center text-[#71717a] py-8 border border-dashed border-white/10 rounded-xl">
+              <div className="text-center text-secondary py-8 border border-dashed border-edge/20 light:border-edge rounded-xl">
                 No saved drafts yet.
               </div>
             ) : (
               drafts.map(draft => (
-                <div key={draft.id} className="flex items-center justify-between p-4 bg-white/5 rounded-xl border border-white/5 hover:border-white/10 transition-colors">
+                <div key={draft.id} className="flex items-center justify-between p-4 bg-control/50 rounded-xl border border-edge/20 light:border-edge hover:border-edge/40 transition-colors">
                   <div className="flex flex-col min-w-0 pr-4">
-                    <span className="font-bold text-white truncate">{draft.title}</span>
-                    <span className="text-xs text-[#71717a]">
+                    <span className="font-bold text-foreground truncate">{draft.title}</span>
+                    <span className="text-xs text-secondary">
                       {new Date(draft.updatedAt).toLocaleString()}
                     </span>
                   </div>
                   <div className="flex items-center gap-2 shrink-0">
                     <button 
                       onClick={() => handleLoad(draft.id)}
-                      className="px-4 py-2 bg-white text-black text-xs font-bold rounded-full hover:bg-gray-200 transition-colors"
+                      className="px-4 py-2 bg-foreground text-background text-xs font-bold rounded-full hover:opacity-90 transition-colors"
                     >
                       Load
                     </button>

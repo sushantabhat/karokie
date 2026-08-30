@@ -1,13 +1,69 @@
 @import "tailwindcss";
 
+@custom-variant light (&:where([data-theme="light"], [data-theme="light"] *));
+
 :root {
+  /* Dark (default) theme */
   --background: #0B0E14;
-  --foreground: #ededed;
+  --foreground: #fafafa;
+  --panel: #161B22;
+  --control: #1f222b;
+  --control-hover: #272a35;
+  --edge: #3f3f46;
+  --muted: #a1a1aa;
+  --secondary: #71717a;
+  --wave-bg: #121214;
+  --input-text: #ededed;
+  --slider-track: #272a35;
+  --slider-fill: #0ea5e9;
+  --slider-thumb: #f4f4f5;
+  --wave-track: #00E5FF;
+  --wave-vocal: #8B5CF6;
+  --seg-bg: #181b21;
+  --seg-active: #272a35;
+  --lyric-inactive: #71717a;
+}
+
+[data-theme="light"] {
+  --background: #F1F5F9;
+  --foreground: #0F172A;
+  --panel: #FFFFFF;
+  --control: #E2E8F0;
+  --control-hover: #CBD5E1;
+  --edge: #E2E8F0;
+  --muted: #475569;
+  --secondary: #64748B;
+  --wave-bg: #FFFFFF;
+  --input-text: #0F172A;
+  --slider-track: #E2E8F0;
+  --slider-fill: #0284C7;
+  --slider-thumb: #334155;
+  --wave-track: #0284C7;
+  --wave-vocal: #a855f7;
+  --seg-bg: #E2E8F0;
+  --seg-active: #FFFFFF;
+  --lyric-inactive: #94A3B8;
 }
 
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
+  --color-panel: var(--panel);
+  --color-control: var(--control);
+  --color-control-hover: var(--control-hover);
+  --color-edge: var(--edge);
+  --color-muted: var(--muted);
+  --color-secondary: var(--secondary);
+  --color-wave-bg: var(--wave-bg);
+  --color-input-text: var(--input-text);
+  --color-slider-track: var(--slider-track);
+  --color-slider-fill: var(--slider-fill);
+  --color-slider-thumb: var(--slider-thumb);
+  --color-wave-track: var(--wave-track);
+  --color-wave-vocal: var(--wave-vocal);
+  --color-seg-bg: var(--seg-bg);
+  --color-seg-active: var(--seg-active);
+  --color-lyric-inactive: var(--lyric-inactive);
   --font-sans: var(--font-geist-sans);
   --font-mono: var(--font-geist-mono);
 }
@@ -16,4 +72,8 @@ body {
   background: var(--background);
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
+}
+
+* {
+  transition: background-color 0.2s ease, border-color 0.2s ease, color 0.2s ease;
 }

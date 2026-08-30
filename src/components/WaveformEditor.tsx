@@ -16,12 +16,18 @@ interface WaveformEditorProps {
   trackUrl: string;
   lyrics: LineSync[];
   onUpdateLine: (id: string, start: number | null, end: number | null) => void;
+  theme: 'dark' | 'light';
 }
+
+const getColors = (theme: 'dark' | 'light') =>
+  theme === 'light'
+    ? { wave: '#0284C7', progress: '#0ea5e9', cursor: '#fb7185', timeline: '#64748B' }
+    : { wave: '#00E5FF', progress: '#38bdf8', cursor: '#fb7185', timeline: '#71717a' };
 
 // Fallback for drag data across shadow boundaries
 let activeDraggedLineId: string | null = null;
 
-export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: WaveformEditorProps) {
+export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine, theme }: WaveformEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
   const regions = useRef<RegionsPlugin | null>(null);
@@ -65,11 +71,12 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
     if (!containerRef.current) return;
 
     try {
+const colors = getColors(theme);
       wavesurfer.current = WaveSurfer.create({
         container: containerRef.current,
-        waveColor: '#3f3f46',
-        progressColor: '#38bdf8',
-        cursorColor: '#fb7185',
+        waveColor: colors.wave,
+        progressColor: colors.progress,
+        cursorColor: colors.cursor,
         cursorWidth: 2,
         height: 180,
         normalize: true,
@@ -85,7 +92,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         primaryLabelInterval: 10,
         style: {
           fontSize: '10px',
-          color: '#71717a',
+          color: colors.timeline,
         },
       }));
 
@@ -140,6 +147,12 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
       } catch (err) {}
     };
   }, [trackUrl]);
+
+  useEffect(() => {
+    if (!wavesurfer.current) return;
+    const colors = getColors(theme);
+    wavesurfer.current.setOptions({ waveColor: colors.wave, progressColor: colors.progress });
+  }, [theme]);
 
   // Update Zoom
   useEffect(() => {
@@ -260,16 +273,17 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
   };
 
   return (
-    <div className="flex h-full border border-white/10 bg-[#161B22] rounded-lg shadow-sm overflow-hidden">
+    <div className="flex flex-col md:flex-row h-full border border-edge/20 light:border-edge bg-panel rounded-lg shadow-sm overflow-hidden">
       
       {/* WAITING BOX (Left Sidebar) */}
-      <div className="w-64 border-r border-white/10 flex flex-col bg-[#0B0E14] shrink-0">
-        <div className="p-3 border-b border-white/10">
-          <h3 className="font-bold text-sm text-white">Waiting Box</h3>
-          <p className="text-xs text-[#71717a]">Drag to timeline to sync</p>
+      <div className="w-full md:w-64 border-r border-edge/20 light:border-edge flex flex-col bg-background shrink-0 max-h-36 md:max-h-none shrink-0">
+        <div className="p-2.5 md:p-3 border-b border-edge/20 light:border-edge">
+          <h3 className="font-bold text-sm text-foreground">Waiting Box</h3>
+          <p className="text-xs text-secondary hidden md:block">Drag to timeline to sync</p>
+          <p className="text-xs text-secondary md:hidden">Tap a card, then tap the timeline to place it</p>
         </div>
         <div 
-          className="flex-1 overflow-y-auto p-2 flex flex-col gap-2 custom-scrollbar"
+          className="flex-1 overflow-hidden p-2 flex md:flex-col gap-2 custom-scrollbar overflow-x-auto md:overflow-y-auto"
           onDragOver={(e) => e.preventDefault()}
           onDrop={(e) => {
             e.preventDefault();
@@ -278,7 +292,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
           }}
         >
           {lyrics.filter(l => l.start === null).length === 0 ? (
-            <div className="text-center p-4 text-xs font-mono text-[#71717a]">All lyrics placed!</div>
+            <div className="text-center p-4 text-xs font-mono text-secondary">All lyrics placed!</div>
           ) : (
             lyrics.map((line, index) => ({...line, index})).filter(l => l.start === null).map(line => (
               <div
@@ -305,11 +319,16 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
                     }
                   }, 100);
                 }}
-                className="p-3 bg-[#1f222b] border border-[#3f3f46] rounded cursor-grab hover:bg-[#272a35] active:cursor-grabbing transition-colors group flex gap-3 items-start"
+                onClick={() => {
+                  if (window.matchMedia('(pointer: coarse)').matches) {
+                    onUpdateLine(line.id, null, null);
+                  }
+                }}
+                className="p-3 md:p-3 bg-control border border-edge rounded cursor-grab hover:bg-control-hover active:cursor-grabbing transition-colors group flex gap-3 items-start shrink-0 w-40 md:w-auto snap-start"
                 title="Drag onto the waveform"
               >
                 <span className="text-[11px] font-mono font-bold text-[#38bdf8] opacity-60 mt-0.5 shrink-0 w-4">{line.index + 1}.</span>
-                <span className="text-sm font-bold text-white line-clamp-2">{line.text}</span>
+                <span className="text-sm font-bold text-foreground line-clamp-2">{line.text}</span>
               </div>
             ))
           )}
@@ -323,37 +342,37 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
             Error: {errorMsg}
           </div>
         )}
-        <div className="p-3 border-b border-white/10 flex items-center justify-between shrink-0">
-          <h3 className="font-bold text-white flex items-center gap-2 text-sm">
-            <span className="text-[#38bdf8]">Global Timeline</span> (CapCut Style)
+        <div className="p-2 md:p-3 border-b border-edge/20 light:border-edge flex flex-wrap items-center justify-between shrink-0 gap-2">
+          <h3 className="font-bold text-foreground flex items-center gap-2 text-sm">
+            <span className="text-[#38bdf8] hidden sm:inline">Global Timeline</span><span className="text-[#38bdf8] sm:hidden">Timeline</span>
           </h3>
-          <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 bg-[#0B0E14] rounded-full border border-white/10">
+          <div className="flex items-center gap-2 md:gap-4">
+            <div className="flex items-center gap-2 px-3 py-1 bg-background rounded-full border border-edge/20 light:border-edge">
               <span className="text-xs font-mono text-[#38bdf8]">{formatTime(currentTime)}</span>
-              <span className="text-xs font-mono text-[#71717a]">/ {formatTime(duration)}</span>
+              <span className="text-xs font-mono text-secondary hidden sm:inline">/ {formatTime(duration)}</span>
             </div>
             <div className="flex items-center gap-2">
-              <button onClick={() => setZoom(z => Math.max(10, z - 20))} className="p-1.5 text-[#a1a1aa] hover:text-white rounded hover:bg-[#1f222b]">
+              <button onClick={() => setZoom(z => Math.max(10, z - 20))} className="p-1.5 text-muted hover:text-foreground rounded hover:bg-control" aria-label="Zoom out">
                 <ZoomOut className="w-4 h-4" />
               </button>
-              <span className="text-xs font-mono text-[#71717a] w-12 text-center">{zoom}px</span>
-              <button onClick={() => setZoom(z => Math.min(300, z + 20))} className="p-1.5 text-[#a1a1aa] hover:text-white rounded hover:bg-[#1f222b]">
+              <span className="text-xs font-mono text-secondary w-10 md:w-12 text-center">{zoom}px</span>
+              <button onClick={() => setZoom(z => Math.min(300, z + 20))} className="p-1.5 text-muted hover:text-foreground rounded hover:bg-control" aria-label="Zoom in">
                 <ZoomIn className="w-4 h-4" />
               </button>
             </div>
-            <div className="h-4 w-px bg-[#1f222b]" />
-            <button onClick={togglePlay} className="w-8 h-8 flex items-center justify-center bg-white text-black rounded-full hover:bg-[#0ea5e9] transition-colors">
+            <div className="h-4 w-px bg-control" />
+            <button onClick={togglePlay} className="w-9 h-9 md:w-8 md:h-8 flex items-center justify-center bg-foreground text-background rounded-full hover:bg-[#0ea5e9] transition-colors">
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
           </div>
         </div>
         
         {/* Cinematic Scrolling Lyric Screen (Apple Music Style) */}
-        <div className="h-48 shrink-0 bg-[#0B0E14] border-b border-white/10 overflow-hidden relative flex flex-col items-center justify-start">
+        <div className="h-36 md:h-48 shrink-0 bg-background border-b border-edge/20 light:border-edge overflow-hidden relative flex flex-col items-center justify-start">
 
           {/* Scroll Masks */}
-          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#09090b] to-transparent z-10 pointer-events-none" />
-          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#09090b] to-transparent z-10 pointer-events-none" />
+          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#09090b] light:from-[#F1F5F9] to-transparent z-10 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#09090b] light:from-[#F1F5F9] to-transparent z-10 pointer-events-none" />
 
           {/* Rolling Lyrics Container */}
           <div 
@@ -361,7 +380,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
             style={{ transform: `translateY(${-(focusIndex * 48)}px)`, marginTop: '72px' }}
           >
             {lyrics.length === 0 ? (
-              <div className="h-[48px] flex items-center justify-center w-full text-sm font-mono text-[#71717a] italic">No synced lyrics...</div>
+              <div className="h-[48px] flex items-center justify-center w-full text-sm font-mono text-secondary italic">No synced lyrics...</div>
             ) : (
               lyrics.map((line, idx) => {
                 const isActive = activeLyric && activeLyric.id === line.id;
@@ -370,7 +389,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
                 return (
                   <div 
                     key={line.id}
-                    className={`h-[48px] flex flex-col items-center justify-center w-full px-8 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+                    className={`h-[48px] flex flex-col items-center justify-center w-full px-4 md:px-8 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
                       isActive 
                         ? 'scale-100 opacity-100' 
                         : isPast
@@ -379,13 +398,13 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
                     }`}
                   >
                     <div className="flex items-center gap-3 max-w-full justify-center">
-                      <span className={`font-mono shrink-0 ${isActive ? 'text-xl text-[#38bdf8] opacity-50' : 'text-sm text-[#71717a] opacity-30'}`}>{idx + 1}.</span>
-                      <span className={`truncate text-center ${isActive ? 'text-2xl md:text-3xl font-black text-white font-semibold drop-shadow-sm' : isActive === false && isPast ? 'text-xl font-bold text-[#3f3f46]' : 'text-xl font-bold text-[#52525b]'}`}>
+                      <span className={`font-mono shrink-0 ${isActive ? 'text-xl text-[#38bdf8] light:text-[#0369a1] opacity-50' : 'text-sm text-secondary light:text-slate-400 opacity-30'}`}>{idx + 1}.</span>
+                      <span className={`truncate text-center ${isActive ? 'text-xl md:text-3xl font-black text-foreground font-semibold drop-shadow-sm' : isActive === false && isPast ? 'text-base md:text-xl font-bold text-edge light:text-slate-400' : 'text-base md:text-xl font-bold text-secondary light:text-slate-400'}`}>
                         {line.text}
                       </span>
                     </div>
                     {isActive && (
-                      <span className="text-xs font-mono text-[#38bdf8] opacity-80 mt-1 animate-in fade-in zoom-in duration-300">
+                      <span className="text-xs font-mono text-[#38bdf8] light:text-[#0369a1] opacity-80 mt-1 animate-in fade-in zoom-in duration-300">
                         {line.start !== null ? line.start.toFixed(2) : '0.00'}s - {line.end !== null ? line.end.toFixed(2) : '...'}s
                       </span>
                     )}
@@ -397,7 +416,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         </div>
 
         <div 
-          className="flex-1 p-4 overflow-hidden flex flex-col relative"
+          className="flex-1 p-2 md:p-4 overflow-hidden flex flex-col relative"
           onDragEnter={(e) => { e.preventDefault(); }}
           onDragOver={(e) => {
             e.preventDefault();
@@ -470,7 +489,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         >
           <div 
             ref={dropZoneRef}
-            className="absolute inset-4 z-50 bg-white/5 border-2 border-dashed border-[#38bdf8] rounded backdrop-blur-[1px] pointer-events-none transition-opacity duration-200 overflow-hidden"
+            className="absolute inset-4 z-50 bg-edge/10 light:bg-slate-100 border-2 border-dashed border-[#38bdf8] rounded backdrop-blur-[1px] pointer-events-none transition-opacity duration-200 overflow-hidden"
             style={{ opacity: 0 }}
           >
             <div className="flex items-center justify-center w-full h-full">
@@ -479,10 +498,10 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
             
             {/* Shadow Projectile */}
             <div 
-              className="drop-cursor absolute top-0 bottom-0 w-[2px] bg-white shadow-[0_0_12px_#38bdf8] z-10 origin-top"
+              className="drop-cursor absolute top-0 bottom-0 w-[2px] bg-foreground shadow-[0_0_12px_#38bdf8] z-10 origin-top"
               style={{ left: 0 }}
             >
-              <div className="absolute top-0 left-0 px-2 py-1 bg-white text-black text-[10px] font-bold rounded-b whitespace-nowrap -translate-x-1/2">
+              <div className="absolute top-0 left-0 px-2 py-1 bg-foreground text-background text-[10px] font-bold rounded-b whitespace-nowrap -translate-x-1/2">
                 Drop Time
               </div>
             </div>
@@ -490,7 +509,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
           
           <div 
             ref={containerRef} 
-            className="waveform-container w-full flex-1 rounded bg-[#0B0E14] border border-white/10 custom-scrollbar overflow-y-auto"
+            className="waveform-container w-full flex-1 rounded bg-background border border-edge/20 light:border-edge custom-scrollbar overflow-y-auto"
           />
         </div>
       </div>
