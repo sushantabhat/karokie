@@ -131,14 +131,28 @@ export function useAudioMixer() {
     if (trackSourceRef.current) {
       trackSourceRef.current.onended = null;
       try { trackSourceRef.current.stop(); } catch {}
+      trackSourceRef.current.disconnect();
+      trackSourceRef.current = null;
     }
     if (vocalSourceRef.current) {
       try { vocalSourceRef.current.stop(); } catch {}
+      vocalSourceRef.current.disconnect();
+      vocalSourceRef.current = null;
     }
     if (audioContextRef.current?.state === 'suspended') {
       audioContextRef.current.resume();
     }
     setIsPlaying(false);
+  }, []);
+
+  const clearTrack = useCallback(() => {
+    if (trackSourceRef.current) {
+      try { trackSourceRef.current.stop(); } catch {}
+      trackSourceRef.current.disconnect();
+      trackSourceRef.current = null;
+    }
+    trackBufferRef.current = null;
+    setTrackBuffer(null);
   }, []);
 
   const playPreview = useCallback((settings: MixSettings, startOffset: number = 0) => {
@@ -317,6 +331,7 @@ export function useAudioMixer() {
     loadVocal,
     mergeVocal,
     clearVocal,
+    clearTrack,
     playPreview,
     stopPreview,
     exportMix,

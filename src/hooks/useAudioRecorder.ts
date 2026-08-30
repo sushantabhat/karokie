@@ -103,6 +103,6 @@ export function useAudioRecorder() {
     pauseRecording,
     resumeRecording,
     resetRecording,
-    getAnalyser: () => analyserRef.current,
+    getAnalyser: () => analyserRef.current, setRecordedBlob
   };
 }

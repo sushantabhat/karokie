@@ -2,8 +2,11 @@
 
 import { useState, useRef, useEffect } from 'react';
 import WaveformEditor from "./WaveformEditor";
+import { DraftsModal } from "./DraftsModal";
+import { saveDraft, SavedDraft } from "@/utils/db";
 
-import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2, Volume2, Mic2, RotateCcw, Target, Plus, Minus, Save } from 'lucide-react';
+
+import { Upload, Headphones, Mic, Play, Pause, Square, Settings2, Download, CheckCircle2, Volume2, Mic2, RotateCcw, Target, Plus, Minus, Save, FolderOpen, Trash2 } from 'lucide-react';
 import { useAudioRecorder } from '@/hooks/useAudioRecorder';
 import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 import { saveTrackToDB, getTrackFromDB, saveVocalToDB, getVocalFromDB } from '@/utils/indexedDB';
@@ -182,11 +185,11 @@ export default function KaraokeStudio() {
   
   const { 
     isRecording, isPaused: isRecPaused, 
-    recordedBlob, startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, getAnalyser 
+    recordedBlob, setRecordedBlob, startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, getAnalyser 
   } = useAudioRecorder();
 
   const { 
-    loadTrack, loadVocal, mergeVocal, clearVocal, playPreview, stopPreview, exportMix,
+    loadTrack, loadVocal, mergeVocal, clearVocal, clearTrack, playPreview, stopPreview, exportMix,
     isPlaying, isProcessing, setTrackVolumeLive, setVocalVolumeLive,
     trackBuffer, vocalBuffer 
   } = useAudioMixer();
@@ -529,12 +532,87 @@ export default function KaraokeStudio() {
         loadVocal(recordedBlob);
       }
     }
-  }, [recordedBlob, loadVocal, mergeVocal, vocalBuffer]);
+  }, [recordedBlob, loadVocal, mergeVocal, clearVocal, clearTrack, vocalBuffer]);
 
   const [trackMuted, setTrackMuted] = useState(false);
   const [vocalMuted, setVocalMuted] = useState(false);
   const [showFullLyrics, setShowFullLyrics] = useState(false);
+  
+  const [showDraftsModal, setShowDraftsModal] = useState(false);
+  const [isSavingDraft, setIsSavingDraft] = useState(false);
 
+  const handleSaveDraftClick = async () => {
+    if (!trackFile) return;
+    
+    const defaultTitle = trackFile.name.replace(/\.[^/.]+$/, "") || "Untitled Project";
+    const userTitle = window.prompt("Enter a name for this draft:", defaultTitle);
+    
+    if (userTitle === null) return; // User cancelled
+    
+    setIsSavingDraft(true);
+    try {
+      const draftId = `draft_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+      const finalTitle = userTitle.trim() || defaultTitle;
+      
+      await saveDraft({
+        id: draftId,
+        title: finalTitle,
+        updatedAt: Date.now(),
+        trackFile,
+        recordedBlob: recordedBlob || undefined,
+        lyrics,
+        mixSettings
+      });
+      alert('Draft saved successfully!');
+    } catch (e: any) {
+      if (e.message === 'LIMIT_REACHED') {
+        alert('You have reached the limit of 3 drafts. Please delete an old draft first.');
+        setShowDraftsModal(true);
+      } else {
+        alert('Failed to save draft. Try again.');
+        console.error(e);
+      }
+    } finally {
+      setIsSavingDraft(false);
+    }
+  };
+
+  const handleNewSession = () => {
+    if (confirm("Are you sure you want to start over? Unsaved progress will be lost.")) {
+      if (isPlaying) handleStopClick();
+      setTrackFile(null);
+      setTrackUrl(null);
+      clearTrack(); // useAudioMixer will handle null or we can just ignore since UI will block play
+      setRecordedBlob(null);
+      clearVocal();
+      setLyrics([]);
+      setRawLyricsText("");
+      setCurrentTime(0);
+      setIsSyncSessionActive(false);
+    }
+  };
+
+  const handleLoadDraft = (draft: SavedDraft) => {
+    if (isPlaying) handleStopClick();
+    if (draft.trackFile) {
+      setTrackFile(draft.trackFile);
+      setTrackUrl(URL.createObjectURL(draft.trackFile));
+      loadTrack(draft.trackFile);
+    }
+    
+    if (draft.recordedBlob) {
+      setRecordedBlob(draft.recordedBlob);
+    } else {
+      setRecordedBlob(null);
+      clearVocal();
+    }
+    
+    setLyrics(draft.lyrics);
+    setMixSettings(draft.mixSettings);
+    setActiveTab('MIXER');
+  };
+
+  // Mute Logic
   const effectiveTrackVolume = trackMuted ? 0 : mixSettings.trackVolume;
   const effectiveVocalVolume = vocalMuted || (activeTab === 'SYNC' || activeTab === 'EDIT') ? 0 : mixSettings.vocalVolume;
 
@@ -745,8 +823,10 @@ export default function KaraokeStudio() {
   const hasSyncedLines = lyrics.some(l => l.start !== null);
 
   return (
-    <div className="h-screen flex flex-col bg-[#0B0E14] text-[#fafafa] font-sans relative overflow-hidden">
-      
+    <>
+      {showDraftsModal && <DraftsModal onClose={() => setShowDraftsModal(false)} onLoad={handleLoadDraft} />}
+      <div className="h-screen flex flex-col bg-[#0B0E14] text-[#fafafa] font-sans relative overflow-hidden">
+
       {/* HEADER */}
       <header className="h-16 shrink-0 flex items-center justify-between border-b border-white/10 bg-[#161B22] px-8 shadow-sm z-10">
         
@@ -807,10 +887,36 @@ export default function KaraokeStudio() {
             </button>
           </div>
 
+            <button 
+              onClick={handleNewSession}
+              className="px-5 py-2 bg-transparent border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded-full text-xs font-bold transition-all flex items-center gap-2"
+              title="Clear all and start fresh"
+            >
+              <RotateCcw className="w-3.5 h-3.5" />
+              Start Over
+            </button>
+
           <div className="h-6 w-px bg-[#1f222b]" />
 
           {/* Action Buttons based on Tab */}
           <div className="flex items-center gap-3">
+            <button 
+              onClick={() => setShowDraftsModal(true)}
+              className="px-5 py-2 bg-transparent border border-[#1db954]/30 text-[#1db954] hover:bg-[#1db954]/10 rounded-full text-xs font-bold transition-all flex items-center gap-2"
+            >
+              <FolderOpen className="w-3.5 h-3.5" />
+              My Drafts
+            </button>
+            <button 
+              onClick={handleSaveDraftClick}
+              disabled={!trackFile || lyrics.length === 0}
+              className="px-5 py-2 bg-transparent border border-white/20 text-white hover:bg-white/10 rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
+            >
+              <Save className="w-3.5 h-3.5" />
+              {isSavingDraft ? "Saving..." : "Save Draft"}
+            </button>
+            <div className="h-6 w-px bg-[#1f222b] mx-2" />
+
             {activeTab === "MIXER" && (
               <>
                 <button
@@ -984,6 +1090,20 @@ export default function KaraokeStudio() {
                     <span className="font-bold text-sm text-white truncate">🎵 Instrumental Track</span>
                   </div>
                   <div className="flex gap-2 shrink-0">
+                    <button 
+                      onClick={() => {
+                         if(confirm("Remove instrumental track?")) {
+                            if (isPlaying) handleStopClick();
+                            setTrackFile(null);
+                            setTrackUrl(null);
+                            clearTrack();
+                         }
+                      }}
+                      className="w-6 h-6 rounded-xl border border-transparent text-[#71717a] hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors flex items-center justify-center"
+                      title="Remove Track"
+                    >
+                      <Trash2 className="w-3.5 h-3.5" />
+                    </button>
                     {trackBuffer && (
                       <button 
                         onClick={handlePlayPauseClick} 
@@ -1069,6 +1189,21 @@ export default function KaraokeStudio() {
                     )}
                   </div>
                   <div className="flex gap-2 shrink-0">
+                    {vocalBuffer && (
+                      <button 
+                        onClick={() => {
+                           if(confirm("Delete this vocal recording?")) {
+                              if (isPlaying) handleStopClick();
+                              setRecordedBlob(null);
+                              clearVocal();
+                           }
+                        }}
+                        className="w-6 h-6 rounded-xl border border-transparent text-[#71717a] hover:text-[#ef4444] hover:bg-[#ef4444]/10 transition-colors flex items-center justify-center"
+                        title="Delete Vocals"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    )}
                     {vocalBuffer && (
                       <button 
                         onClick={handlePlayPauseClick} 
@@ -1419,5 +1554,6 @@ export default function KaraokeStudio() {
         />
       )}
     </div>
+    </>
   );
 }
