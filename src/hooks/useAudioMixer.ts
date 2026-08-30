@@ -8,6 +8,9 @@ export interface MixSettings {
   vocalVolume: number;
   latencyOffsetMs: number;
   reverbEnabled: boolean;
+  countInEnabled?: boolean;
+  bpm?: number;
+  exportMode?: "full" | "recorded";
 }
 
 export function useAudioMixer() {
@@ -266,10 +269,21 @@ export function useAudioMixer() {
       const offsetSeconds = settings.latencyOffsetMs / 1000;
       
       let lengthSeconds = 0;
-      if (offsetSeconds >= 0) {
-        lengthSeconds = Math.max(trackDuration, offsetSeconds + vocalDuration);
+      const mode = settings.exportMode || 'full';
+      
+      if (mode === 'recorded') {
+        // Export exactly the duration of the vocals plus the offset
+        if (offsetSeconds >= 0) {
+          lengthSeconds = offsetSeconds + vocalDuration;
+        } else {
+          lengthSeconds = vocalDuration; // vocal starts at 0, track starts later
+        }
       } else {
-        lengthSeconds = Math.max(vocalDuration, Math.abs(offsetSeconds) + trackDuration);
+        if (offsetSeconds >= 0) {
+          lengthSeconds = Math.max(trackDuration, offsetSeconds + vocalDuration);
+        } else {
+          lengthSeconds = Math.max(vocalDuration, Math.abs(offsetSeconds) + trackDuration);
+        }
       }
       
       const offlineCtx = new OfflineAudioContext(

@@ -1,4 +1,4 @@
-import * as lamejs from 'lamejs';
+const lamejs = require('lamejs');
 
 export function audioBufferToMp3(buffer: AudioBuffer): Blob {
   const channels = buffer.numberOfChannels;
@@ -6,6 +6,13 @@ export function audioBufferToMp3(buffer: AudioBuffer): Blob {
   const kbps = 128; // standard quality
 
   // @ts-expect-error - lamejs has no types
+  // @ts-expect-error patch lamejs bug
+  globalThis.MPEGMode = require("lamejs/src/js/MPEGMode.js");
+  // @ts-expect-error patch lamejs bug
+  globalThis.Lame = require("lamejs/src/js/Lame.js");
+  // @ts-expect-error patch lamejs bug
+  globalThis.BitStream = require("lamejs/src/js/BitStream.js");
+
   const mp3encoder = new lamejs.Mp3Encoder(channels, sampleRate, kbps);
   const mp3Data: Int8Array[] = [];
 

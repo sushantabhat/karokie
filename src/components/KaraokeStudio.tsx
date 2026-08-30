@@ -14,6 +14,15 @@ import { audioBufferToWav } from '@/utils/audioBufferToWav';
 
 function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeekStart, onSeekDrag, onSeekEnd, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string | string[], duration: number, currentTime: number, totalDuration?: number, onSeekStart?: (time: number) => void, onSeekDrag?: (time: number) => void, onSeekEnd?: (time: number) => void, emptyText?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+type DialogState = {
+  title: string;
+  message?: string;
+  type: "confirm" | "prompt" | "options";
+  options?: { label: string, value: string, style?: "primary" | "danger" | "secondary" }[];
+  defaultValue?: string;
+  resolve: (value: any) => void;
+};
+
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
   
@@ -131,6 +140,30 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
 }
 
 // ==== Auto-Save (localStorage) helpers ====
+export const playCountIn = async (bpm: number) => {
+  return new Promise<void>((resolve) => {
+    const beatDuration = 60 / bpm;
+    const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
+    const startTime = ctx.currentTime + 0.1;
+    for (let i = 0; i < 4; i++) {
+      const osc = ctx.createOscillator();
+      const gain = ctx.createGain();
+      osc.connect(gain);
+      gain.connect(ctx.destination);
+      osc.frequency.value = i === 0 ? 1200 : 800;
+      const time = startTime + i * beatDuration;
+      osc.start(time);
+      gain.gain.setValueAtTime(0, time);
+      gain.gain.linearRampToValueAtTime(1, time + 0.01);
+      gain.gain.exponentialRampToValueAtTime(0.001, time + 0.1);
+      osc.stop(time + 0.1);
+    }
+    setTimeout(() => {
+      resolve();
+    }, (beatDuration * 4 + 0.1) * 1000);
+  });
+};
+
 // Key for the index that tracks recent saved tracks (max 10)
 const AUTOSAVE_INDEX_KEY = 'lyricsAutosaveIndex';
 const AUTOSAVE_MAX = 10;
@@ -199,6 +232,7 @@ export default function KaraokeStudio() {
   const [activeLineIndex, setActiveLineIndex] = useState(0);
   const [isSpacebarDown, setIsSpacebarDown] = useState(false);
   const [isSyncSessionActive, setIsSyncSessionActive] = useState(false);
+  const [isCountingIn, setIsCountingIn] = useState(false);
 
   const [rawLyricsText, setRawLyricsText] = useState("");
   const [lyrics, setLyrics] = useState<LineSync[]>([]);
@@ -217,6 +251,8 @@ export default function KaraokeStudio() {
     vocalVolume: 100,
     latencyOffsetMs: 0,
     reverbEnabled: false,
+    countInEnabled: false,
+    bpm: 120,
   });
 
   // ==== UI state ====
@@ -252,7 +288,7 @@ export default function KaraokeStudio() {
 
         const savedVocal = await getVocalFromDB();
         if (savedVocal) {
-          loadVocal(savedVocal);
+          setRecordedBlob(savedVocal);
         }
 
         const savedTime = localStorage.getItem('playbackTime');
@@ -376,14 +412,28 @@ export default function KaraokeStudio() {
 
   const handleStartRecording = async () => {
     if (!headphonesConfirmed) {
-      const confirmed = window.confirm("Please wear headphones to prevent audio feedback (echo) from your speakers. Click OK when you are ready.");
+      const confirmed = await showDialog({
+        title: "Headphones Required",
+        message: "Please wear headphones to prevent audio feedback (echo) from your speakers.",
+        type: "confirm"
+      });
       if (!confirmed) return;
       setHeadphonesConfirmed(true);
     }
 
     if (vocalBuffer) {
-      const continueTake = window.confirm("Click OK to seamlessly continue recording from the exact end of your last take.\n\nClick Cancel to wipe the track and start a fresh take from the beginning.");
-      if (continueTake) {
+      const takeMode = await showDialog({
+        title: "Continue or Restart?",
+        message: "Do you want to continue your last take, or wipe it and start fresh?",
+        type: "options",
+        options: [
+          { label: "Continue Take", value: "continue", style: "primary" },
+          { label: "Start Fresh", value: "fresh", style: "danger" }
+        ]
+      });
+      if (!takeMode) return; // cancelled
+      
+      if (takeMode === "continue") {
         punchInTimeRef.current = vocalBuffer.duration;
         setCurrentTime(vocalBuffer.duration);
       } else {
@@ -396,6 +446,13 @@ export default function KaraokeStudio() {
     }
 
     stopPreview();
+    
+    if (mixSettings.countInEnabled && mixSettings.bpm) {
+      setIsCountingIn(true);
+      await playCountIn(mixSettings.bpm);
+      setIsCountingIn(false);
+    }
+
     resetRecording();
     await startRecording();
     
@@ -539,15 +596,27 @@ export default function KaraokeStudio() {
   const [showFullLyrics, setShowFullLyrics] = useState(false);
   
   const [showDraftsModal, setShowDraftsModal] = useState(false);
+  const showDialog = (config: Omit<DialogState, "resolve">): Promise<any> => {
+    return new Promise((resolve) => {
+      setDialog({ ...config, resolve });
+    });
+  };
+
+  const [dialog, setDialog] = useState<DialogState | null>(null);
   const [isSavingDraft, setIsSavingDraft] = useState(false);
 
   const handleSaveDraftClick = async () => {
     if (!trackFile) return;
     
     const defaultTitle = trackFile.name.replace(/\.[^/.]+$/, "") || "Untitled Project";
-    const userTitle = window.prompt("Enter a name for this draft:", defaultTitle);
+    const userTitle = await showDialog({
+      title: "Name Your Draft",
+      message: "Enter a name for this draft:",
+      type: "prompt",
+      defaultValue: defaultTitle
+    });
     
-    if (userTitle === null) return; // User cancelled
+    if (userTitle === null || userTitle === undefined) return; // User cancelled
     
     setIsSavingDraft(true);
     try {
@@ -577,8 +646,13 @@ export default function KaraokeStudio() {
     }
   };
 
-  const handleNewSession = () => {
-    if (confirm("Are you sure you want to start over? Unsaved progress will be lost.")) {
+  const handleNewSession = async () => {
+    const confirmed = await showDialog({
+      title: "Start Over?",
+      message: "Are you sure you want to start over? Unsaved progress will be lost.",
+      type: "confirm"
+    });
+    if (confirmed) {
       if (isPlaying) handleStopClick();
       setTrackFile(null);
       setTrackUrl(null);
@@ -670,11 +744,23 @@ export default function KaraokeStudio() {
     }
   };
 
-  const handleExportClick = () => {
+  const handleExportClick = async () => {
+    const mode = await showDialog({
+      title: "Export Mix",
+      message: "How much of the track do you want to export?",
+      type: "options",
+      options: [
+        { label: "Export Entire Song", value: "full", style: "primary" },
+        { label: "Export Recorded Portion Only", value: "recorded", style: "secondary" }
+      ]
+    });
+    if (!mode) return;
+
     exportMix({
       ...mixSettings,
       trackVolume: effectiveTrackVolume,
-      vocalVolume: effectiveVocalVolume
+      vocalVolume: effectiveVocalVolume,
+      exportMode: mode as 'full' | 'recorded'
     }).then(blob => {
       if (blob) {
         const url = URL.createObjectURL(blob);
@@ -772,6 +858,14 @@ export default function KaraokeStudio() {
            next[prevIdx] = { ...next[prevIdx], end: adjustedStart };
         }
       }
+      {isCountingIn && (
+        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-none">
+          <div className="text-5xl font-black text-[#10b981] animate-pulse drop-shadow-[0_0_15px_rgba(16,185,129,0.8)] tracking-widest">
+            GET READY...
+          </div>
+        </div>
+      )}
+
 
       next[idx] = { ...next[idx], start: adjustedStart, end: adjustedEnd };
 
@@ -825,6 +919,49 @@ export default function KaraokeStudio() {
   return (
     <>
       {showDraftsModal && <DraftsModal onClose={() => setShowDraftsModal(false)} onLoad={handleLoadDraft} />}
+      {/* Unified Dialog System */}
+      {dialog && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => { dialog.resolve(dialog.type === "confirm" ? false : null); setDialog(null); }}>
+          <div className="bg-[#161B22] p-6 rounded-2xl border border-white/10 shadow-2xl max-w-sm w-full" onClick={e => e.stopPropagation()}>
+            <h3 className="text-lg font-bold text-white mb-2">{dialog.title}</h3>
+            {dialog.message && <p className="text-sm text-gray-400 mb-6">{dialog.message}</p>}
+            
+            {dialog.type === "confirm" && (
+              <div className="flex gap-3 justify-end">
+                <button onClick={() => { dialog.resolve(false); setDialog(null); }} className="px-4 py-2 text-gray-400 hover:text-white rounded-xl font-medium transition-colors">Cancel</button>
+                <button onClick={() => { dialog.resolve(true); setDialog(null); }} className="px-4 py-2 bg-[#38bdf8] hover:bg-[#38bdf8]/80 text-black rounded-xl font-bold transition-colors">Confirm</button>
+              </div>
+            )}
+
+            {dialog.type === "prompt" && (
+              <form onSubmit={(e) => { e.preventDefault(); const val = (e.currentTarget.elements.namedItem('dialogInput') as HTMLInputElement).value; dialog.resolve(val); setDialog(null); }}>
+                <input name="dialogInput" autoFocus defaultValue={dialog.defaultValue || ''} className="w-full bg-[#0B0E14] border border-white/10 text-white rounded-xl px-4 py-3 mb-4 outline-none focus:border-[#38bdf8]" />
+                <div className="flex gap-3 justify-end">
+                  <button type="button" onClick={() => { dialog.resolve(null); setDialog(null); }} className="px-4 py-2 text-gray-400 hover:text-white rounded-xl font-medium transition-colors">Cancel</button>
+                  <button type="submit" className="px-4 py-2 bg-[#38bdf8] hover:bg-[#38bdf8]/80 text-black rounded-xl font-bold transition-colors">Save</button>
+                </div>
+              </form>
+            )}
+
+            {dialog.type === "options" && dialog.options && (
+              <div className="flex flex-col gap-3">
+                {dialog.options.map((opt) => (
+                  <button key={opt.value} onClick={() => { dialog.resolve(opt.value); setDialog(null); }}
+                    className={`w-full py-3 px-4 rounded-xl font-medium transition-colors text-left ${
+                      opt.style === 'danger' ? 'bg-[#ef4444]/20 hover:bg-[#ef4444]/30 text-[#ef4444]' :
+                      opt.style === 'primary' ? 'bg-[#38bdf8]/20 hover:bg-[#38bdf8]/30 text-[#38bdf8]' :
+                      'bg-white/10 hover:bg-white/20 text-white'
+                    }`}>
+                    {opt.label}
+                  </button>
+                ))}
+                <button onClick={() => { dialog.resolve(null); setDialog(null); }} className="w-full mt-1 py-2 px-4 text-gray-400 hover:text-white rounded-xl font-medium transition-colors">Cancel</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
       <div className="h-screen flex flex-col bg-[#0B0E14] text-[#fafafa] font-sans relative overflow-hidden">
 
       {/* HEADER */}
@@ -1091,8 +1228,13 @@ export default function KaraokeStudio() {
                   </div>
                   <div className="flex gap-2 shrink-0">
                     <button 
-                      onClick={() => {
-                         if(confirm("Remove instrumental track?")) {
+                      onClick={async () => {
+                         const ok = await showDialog({
+                           title: "Remove Track?",
+                           message: "Remove instrumental track?",
+                           type: "confirm"
+                         });
+                         if(ok) {
                             if (isPlaying) handleStopClick();
                             setTrackFile(null);
                             setTrackUrl(null);
@@ -1191,8 +1333,13 @@ export default function KaraokeStudio() {
                   <div className="flex gap-2 shrink-0">
                     {vocalBuffer && (
                       <button 
-                        onClick={() => {
-                           if(confirm("Delete this vocal recording?")) {
+                        onClick={async () => {
+                           const ok = await showDialog({
+                             title: "Delete Vocals?",
+                             message: "Delete this vocal recording?",
+                             type: "confirm"
+                           });
+                           if(ok) {
                               if (isPlaying) handleStopClick();
                               setRecordedBlob(null);
                               clearVocal();
@@ -1289,9 +1436,42 @@ export default function KaraokeStudio() {
                 />
                 <span className="text-sm font-mono font-medium text-white w-14 text-right">{mixSettings.latencyOffsetMs}ms</span>
               </div>
+              <div className="flex items-center gap-4 mt-6">
+                <span className="text-sm font-medium text-[#a1a1aa] w-24">Count-in (4 beats)</span>
+                <button 
+                  onClick={() => updateSetting("countInEnabled", !mixSettings.countInEnabled)}
+                  className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${mixSettings.countInEnabled ? "bg-[#10b981]/20 border-[#10b981] text-[#10b981]" : "border-white/10 text-[#a1a1aa] hover:text-white"}`}
+                >
+                  {mixSettings.countInEnabled ? "Enabled" : "Disabled"}
+                </button>
+                <input 
+                  type="number" min="40" max="240" 
+                  value={mixSettings.bpm || 120}
+                  onChange={(e) => updateSetting("bpm", Number(e.target.value))}
+                  className="w-16 bg-[#1f222b] border border-white/10 text-white rounded text-center text-xs font-mono h-7"
+                />
+                <span className="text-xs text-[#71717a] font-medium -ml-2">BPM</span>
+              </div>
               <span className="text-xs font-medium text-[#71717a] mt-3 block">
                 Nudge timing backward or forward if your Bluetooth microphone is out of sync.
               </span>
+              <div className="flex items-center gap-4 mt-6">
+                <span className="text-sm font-medium text-[#a1a1aa] w-24">Count-in (4 beats)</span>
+                <button 
+                  onClick={() => updateSetting("countInEnabled", !mixSettings.countInEnabled)}
+                  className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${mixSettings.countInEnabled ? "bg-[#10b981]/20 border-[#10b981] text-[#10b981]" : "border-white/10 text-[#a1a1aa] hover:text-white"}`}
+                >
+                  {mixSettings.countInEnabled ? "Enabled" : "Disabled"}
+                </button>
+                <input 
+                  type="number" min="40" max="240" 
+                  value={mixSettings.bpm || 120}
+                  onChange={(e) => updateSetting("bpm", Number(e.target.value))}
+                  className="w-16 bg-[#1f222b] border border-white/10 text-white rounded text-center text-xs font-mono h-7"
+                />
+                <span className="text-xs text-[#71717a] font-medium -ml-2">BPM</span>
+              </div>
+
             </div>
             
             <div className="flex-1 md:border-l border-white/10 md:pl-8 pt-6 md:pt-0 border-t md:border-t-0">
@@ -1310,6 +1490,9 @@ export default function KaraokeStudio() {
               <span className="text-xs font-medium text-[#71717a] mt-3 block">
                 Adds a professional studio echo to your voice when exporting.
               </span>
+              <div className="flex items-center gap-4 mt-6">
+              </div>
+
             </div>
           </div>
           </div>
@@ -1422,9 +1605,14 @@ export default function KaraokeStudio() {
                       >
                         🔄 Restart Sync
                       </button>
-                      <button onClick={(e) => { 
+                      <button onClick={async (e) => { 
                         e.stopPropagation(); 
-                        if (window.confirm("Wipe out all lyrics entirely? This cannot be undone.")) {
+                        const ok = await showDialog({
+                          title: "Wipe Lyrics?",
+                          message: "Wipe out all lyrics entirely? This cannot be undone.",
+                          type: "confirm"
+                        });
+                        if (ok) {
                           if (isPlaying) stopPreview();
                           if (audioRef.current) {
                             audioRef.current.pause();
