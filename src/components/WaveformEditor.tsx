@@ -20,7 +20,6 @@ interface WaveformEditorProps {
 
 export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: WaveformEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const timelineRef = useRef<HTMLDivElement>(null);
   const wavesurfer = useRef<WaveSurfer | null>(null);
   const regions = useRef<RegionsPlugin | null>(null);
   
@@ -28,10 +27,38 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
   const [zoom, setZoom] = useState(50);
   const [isReady, setIsReady] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [hoveredInfo, setHoveredInfo] = useState<string | null>(null);
+  const [currentTime, setCurrentTime] = useState(0);
+  const [duration, setDuration] = useState(0);
+
+  const formatTime = (time: number) => {
+    const mins = Math.floor(time / 60);
+    const secs = Math.floor(time % 60);
+    return `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+  };
+
+  const currentIndex = React.useMemo(() => {
+    let idx = -1;
+    for (let i = 0; i < lyrics.length; i++) {
+      if (lyrics[i].start !== null && currentTime >= lyrics[i].start) {
+        idx = i;
+      }
+    }
+    return idx;
+  }, [lyrics, currentTime]);
+
+  const activeLyric = React.useMemo(() => {
+    if (currentIndex === -1) return null;
+    const line = lyrics[currentIndex];
+    if (line.end !== null && currentTime > line.end) return null;
+    return line;
+  }, [currentIndex, lyrics, currentTime]);
+
+  const focusIndex = currentIndex === -1 ? 0 : currentIndex;
 
   // Initialize WaveSurfer
   useEffect(() => {
-    if (!containerRef.current || !timelineRef.current) return;
+    if (!containerRef.current) return;
 
     try {
       wavesurfer.current = WaveSurfer.create({
@@ -43,11 +70,12 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         height: 180,
         normalize: true,
         minPxPerSec: zoom,
+        dragToSeek: true,
+        interact: true,
       });
 
       regions.current = wavesurfer.current.registerPlugin(RegionsPlugin.create());
       wavesurfer.current.registerPlugin(TimelinePlugin.create({
-        container: timelineRef.current,
         height: 20,
         timeInterval: 5,
         primaryLabelInterval: 10,
@@ -68,10 +96,31 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
 
       wavesurfer.current.on('ready', () => {
         setIsReady(true);
+        if (wavesurfer.current) {
+          setDuration(wavesurfer.current.getDuration());
+          
+          // Forcefully inject handles directly into the Shadow DOM cursor element
+          const shadowRoot = containerRef.current?.shadowRoot;
+          if (shadowRoot) {
+            const cursor = shadowRoot.querySelector('[part="cursor"]') as HTMLElement;
+            if (cursor) {
+              cursor.style.overflow = 'visible';
+              cursor.style.zIndex = '9999';
+              cursor.style.pointerEvents = 'auto';
+              cursor.innerHTML = `
+                <div style="position: absolute; top: -2px; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; background-color: #fb7185; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.8); pointer-events: auto; cursor: ew-resize; z-index: 9999;"></div>
+                <div style="position: absolute; bottom: -2px; left: 50%; transform: translateX(-50%); width: 14px; height: 14px; background-color: #fb7185; border: 2px solid #ffffff; border-radius: 50%; box-shadow: 0 2px 6px rgba(0,0,0,0.8); pointer-events: auto; cursor: ew-resize; z-index: 9999;"></div>
+              `;
+            }
+          }
+        }
       });
 
       wavesurfer.current.on('play', () => setIsPlaying(true));
       wavesurfer.current.on('pause', () => setIsPlaying(false));
+      wavesurfer.current.on('timeupdate', (time: number) => setCurrentTime(time));
+      wavesurfer.current.on('seeking', (time: number) => setCurrentTime(time));
+      wavesurfer.current.on('audioprocess', (time: number) => setCurrentTime(time));
       wavesurfer.current.on('error', (err: any) => {
         console.error('WaveSurfer error:', err);
         setErrorMsg(err?.message || String(err));
@@ -100,20 +149,36 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
     if (!isReady || !regions.current) return;
 
     const existingRegions = regions.current.getRegions();
-    const currentLineIds = new Set(lyrics.map(l => `line-${l.id}`));
+    const validLineIds = new Set(lyrics.filter(l => l.start !== null).map(l => `line-${l.id}`));
 
-    // Remove deleted regions
+    // Remove deleted or unsynced regions
     existingRegions.forEach(r => {
-      if (r.id.startsWith('line-') && !currentLineIds.has(r.id)) {
+      if (r.id.startsWith('line-') && !validLineIds.has(r.id)) {
         r.remove();
       }
     });
 
     lyrics.forEach((line, i) => {
-      const fallbackStart = i * 4;
-      const fallbackEnd = fallbackStart + 3.5;
-      const wStart = line.start !== null ? line.start : fallbackStart;
-      const wEnd = line.end !== null ? line.end : fallbackEnd;
+      // Only render lines that have been synced!
+      if (line.start === null) return;
+
+      const wStart = line.start;
+      let wEnd = line.end;
+      
+      // If end is null (e.g. the very last stamped line), guess the end time based on the next line or add 2 seconds
+      if (wEnd === null) {
+        const nextLine = lyrics.slice(i + 1).find(l => l.start !== null);
+        if (nextLine && nextLine.start !== null) {
+          wEnd = nextLine.start;
+        } else {
+          wEnd = wStart + 2.0; 
+        }
+      }
+
+      // Safeguard: Ensure end is strictly greater than start to avoid region crashing
+      if (wEnd <= wStart) {
+        wEnd = wStart + 0.5;
+      }
 
       const regionId = `line-${line.id}`;
       const existing = existingRegions.find(r => r.id === regionId);
@@ -125,14 +190,23 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         }
       } else {
         const contentEl = document.createElement('div');
-        contentEl.innerText = line.text;
-        contentEl.style.cssText = 'color: #fff; font-size: 14px; font-weight: bold; text-shadow: 0 1px 3px rgba(0,0,0,0.9); padding: 4px; pointer-events: none; text-align: center; width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; overflow: hidden;';
+        // Removed native title and reverted pointer-events to none so WaveSurfer can properly detect clicks and drags on the region!
+        contentEl.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: flex-start; padding: 0 4px; box-sizing: border-box; overflow: hidden; pointer-events: none; border-left: 2px solid rgba(255,255,255,0.4); border-right: 2px solid rgba(255,255,255,0.4);'; 
+        
+        const textSpan = document.createElement('span');
+        textSpan.innerText = line.text;
+        textSpan.style.cssText = 'color: #fff; font-size: 14px; font-weight: bold; text-shadow: 0 1px 3px rgba(0,0,0,0.9); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 100%; pointer-events: none;';
+        
+        contentEl.appendChild(textSpan);
+
+        // Alternate region background colors to clearly separate them
+        const regionColor = i % 2 === 0 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(168, 85, 247, 0.15)'; // Sky blue vs Purple
 
         regions.current!.addRegion({
           start: wStart,
           end: wEnd,
           content: contentEl,
-          color: 'rgba(56, 189, 248, 0.15)',
+          color: regionColor,
           drag: true,
           resize: true,
           id: regionId
@@ -177,6 +251,10 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
           <span className="text-[#38bdf8]">Global Timeline</span> (CapCut Style)
         </h3>
         <div className="flex items-center gap-4">
+          <div className="flex items-center gap-2 px-3 py-1 bg-[#0d0e12] rounded-full border border-[#1f222b]">
+            <span className="text-xs font-mono text-[#38bdf8]">{formatTime(currentTime)}</span>
+            <span className="text-xs font-mono text-[#71717a]">/ {formatTime(duration)}</span>
+          </div>
           <div className="flex items-center gap-2">
             <button onClick={() => setZoom(z => Math.max(10, z - 20))} className="p-1.5 text-[#a1a1aa] hover:text-white rounded hover:bg-[#1f222b]">
               <ZoomOut className="w-4 h-4" />
@@ -193,14 +271,60 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         </div>
       </div>
       
+      {/* Cinematic Scrolling Lyric Screen (Apple Music Style) */}
+      <div className="h-48 shrink-0 bg-[#09090b] border-b border-[#1f222b] overflow-hidden relative flex flex-col items-center justify-start">
+        {/* Ambient Glow */}
+        <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+          <div className="w-[300px] h-[100px] bg-[#38bdf8] blur-[80px] rounded-full mix-blend-screen" />
+        </div>
+
+        {/* Scroll Masks */}
+        <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#09090b] to-transparent z-10 pointer-events-none" />
+        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#09090b] to-transparent z-10 pointer-events-none" />
+
+        {/* Rolling Lyrics Container */}
+        <div 
+          className="flex flex-col items-center w-full transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+          style={{ transform: `translateY(${-(focusIndex * 48)}px)`, marginTop: '72px' }}
+        >
+          {lyrics.length === 0 ? (
+            <div className="h-[48px] flex items-center justify-center w-full text-sm font-mono text-[#71717a] italic">No synced lyrics...</div>
+          ) : (
+            lyrics.map((line, idx) => {
+              const isActive = activeLyric && activeLyric.id === line.id;
+              const isPast = idx < focusIndex;
+              
+              return (
+                <div 
+                  key={line.id}
+                  className={`h-[48px] flex flex-col items-center justify-center w-full px-8 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+                    isActive 
+                      ? 'scale-100 opacity-100' 
+                      : isPast
+                        ? 'scale-95 opacity-40'
+                        : 'scale-95 opacity-60'
+                  }`}
+                >
+                  <span className={`truncate max-w-full text-center ${isActive ? 'text-2xl md:text-3xl font-black text-white drop-shadow-[0_0_15px_rgba(56,189,248,0.4)]' : isActive === false && isPast ? 'text-xl font-bold text-[#3f3f46]' : 'text-xl font-bold text-[#52525b]'}`}>
+                    {line.text}
+                  </span>
+                  {isActive && (
+                    <span className="text-xs font-mono text-[#38bdf8] opacity-80 mt-1 animate-in fade-in zoom-in duration-300">
+                      {line.start !== null ? line.start.toFixed(2) : '0.00'}s - {line.end !== null ? line.end.toFixed(2) : '...'}s
+                    </span>
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
+
       <div className="flex-1 p-4 overflow-hidden flex flex-col relative">
-        {/* Timeline */}
-        <div ref={timelineRef} className="w-full h-[20px] shrink-0 mb-1 opacity-50" />
-        
-        {/* Waveform */}
+        {/* Waveform (Timeline will be automatically injected inside here by WaveSurfer) */}
         <div 
           ref={containerRef} 
-          className="w-full flex-1 rounded bg-[#0d0e12] border border-[#1f222b] custom-scrollbar overflow-y-auto"
+          className="waveform-container w-full flex-1 rounded bg-[#0d0e12] border border-[#1f222b] custom-scrollbar overflow-y-auto"
         />
       </div>
     </div>
