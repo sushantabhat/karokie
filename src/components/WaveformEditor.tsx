@@ -260,11 +260,11 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
   };
 
   return (
-    <div className="flex h-full border border-[#1f222b] bg-[#16181f] rounded-lg shadow-sm overflow-hidden">
+    <div className="flex h-full border border-white/10 bg-[#161B22] rounded-lg shadow-sm overflow-hidden">
       
       {/* WAITING BOX (Left Sidebar) */}
-      <div className="w-64 border-r border-[#1f222b] flex flex-col bg-[#0d0e12] shrink-0">
-        <div className="p-3 border-b border-[#1f222b]">
+      <div className="w-64 border-r border-white/10 flex flex-col bg-[#0B0E14] shrink-0">
+        <div className="p-3 border-b border-white/10">
           <h3 className="font-bold text-sm text-white">Waiting Box</h3>
           <p className="text-xs text-[#71717a]">Drag to timeline to sync</p>
         </div>
@@ -323,12 +323,12 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
             Error: {errorMsg}
           </div>
         )}
-        <div className="p-3 border-b border-[#1f222b] flex items-center justify-between shrink-0">
+        <div className="p-3 border-b border-white/10 flex items-center justify-between shrink-0">
           <h3 className="font-bold text-white flex items-center gap-2 text-sm">
             <span className="text-[#38bdf8]">Global Timeline</span> (CapCut Style)
           </h3>
           <div className="flex items-center gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 bg-[#0d0e12] rounded-full border border-[#1f222b]">
+            <div className="flex items-center gap-2 px-3 py-1 bg-[#0B0E14] rounded-full border border-white/10">
               <span className="text-xs font-mono text-[#38bdf8]">{formatTime(currentTime)}</span>
               <span className="text-xs font-mono text-[#71717a]">/ {formatTime(duration)}</span>
             </div>
@@ -342,18 +342,14 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
               </button>
             </div>
             <div className="h-4 w-px bg-[#1f222b]" />
-            <button onClick={togglePlay} className="w-8 h-8 flex items-center justify-center bg-[#38bdf8] text-gray-900 rounded-full hover:bg-[#0ea5e9] transition-colors">
+            <button onClick={togglePlay} className="w-8 h-8 flex items-center justify-center bg-white text-black rounded-full hover:bg-[#0ea5e9] transition-colors">
               {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
             </button>
           </div>
         </div>
         
         {/* Cinematic Scrolling Lyric Screen (Apple Music Style) */}
-        <div className="h-48 shrink-0 bg-[#09090b] border-b border-[#1f222b] overflow-hidden relative flex flex-col items-center justify-start">
-          {/* Ambient Glow */}
-          <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
-            <div className="w-[300px] h-[100px] bg-[#38bdf8] blur-[80px] rounded-full mix-blend-screen" />
-          </div>
+        <div className="h-48 shrink-0 bg-[#0B0E14] border-b border-white/10 overflow-hidden relative flex flex-col items-center justify-start">
 
           {/* Scroll Masks */}
           <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#09090b] to-transparent z-10 pointer-events-none" />
@@ -384,7 +380,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
                   >
                     <div className="flex items-center gap-3 max-w-full justify-center">
                       <span className={`font-mono shrink-0 ${isActive ? 'text-xl text-[#38bdf8] opacity-50' : 'text-sm text-[#71717a] opacity-30'}`}>{idx + 1}.</span>
-                      <span className={`truncate text-center ${isActive ? 'text-2xl md:text-3xl font-black text-white drop-shadow-[0_0_15px_rgba(56,189,248,0.4)]' : isActive === false && isPast ? 'text-xl font-bold text-[#3f3f46]' : 'text-xl font-bold text-[#52525b]'}`}>
+                      <span className={`truncate text-center ${isActive ? 'text-2xl md:text-3xl font-black text-white font-semibold drop-shadow-sm' : isActive === false && isPast ? 'text-xl font-bold text-[#3f3f46]' : 'text-xl font-bold text-[#52525b]'}`}>
                         {line.text}
                       </span>
                     </div>
@@ -474,7 +470,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         >
           <div 
             ref={dropZoneRef}
-            className="absolute inset-4 z-50 bg-sky-500/10 border-2 border-dashed border-[#38bdf8] rounded backdrop-blur-[1px] pointer-events-none transition-opacity duration-200 overflow-hidden"
+            className="absolute inset-4 z-50 bg-white/5 border-2 border-dashed border-[#38bdf8] rounded backdrop-blur-[1px] pointer-events-none transition-opacity duration-200 overflow-hidden"
             style={{ opacity: 0 }}
           >
             <div className="flex items-center justify-center w-full h-full">
@@ -486,7 +482,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
               className="drop-cursor absolute top-0 bottom-0 w-[2px] bg-white shadow-[0_0_12px_#38bdf8] z-10 origin-top"
               style={{ left: 0 }}
             >
-              <div className="absolute top-0 left-0 px-2 py-1 bg-[#38bdf8] text-gray-900 text-[10px] font-bold rounded-b whitespace-nowrap -translate-x-1/2">
+              <div className="absolute top-0 left-0 px-2 py-1 bg-white text-black text-[10px] font-bold rounded-b whitespace-nowrap -translate-x-1/2">
                 Drop Time
               </div>
             </div>
@@ -494,7 +490,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
           
           <div 
             ref={containerRef} 
-            className="waveform-container w-full flex-1 rounded bg-[#0d0e12] border border-[#1f222b] custom-scrollbar overflow-y-auto"
+            className="waveform-container w-full flex-1 rounded bg-[#0B0E14] border border-white/10 custom-scrollbar overflow-y-auto"
           />
         </div>
       </div>

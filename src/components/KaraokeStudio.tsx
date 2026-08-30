@@ -9,7 +9,7 @@ import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 import { saveTrackToDB, getTrackFromDB, saveVocalToDB, getVocalFromDB } from '@/utils/indexedDB';
 import { audioBufferToWav } from '@/utils/audioBufferToWav';
 
-function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeekStart, onSeekDrag, onSeekEnd, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string, duration: number, currentTime: number, totalDuration?: number, onSeekStart?: (time: number) => void, onSeekDrag?: (time: number) => void, onSeekEnd?: (time: number) => void, emptyText?: string }) {
+function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeekStart, onSeekDrag, onSeekEnd, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string | string[], duration: number, currentTime: number, totalDuration?: number, onSeekStart?: (time: number) => void, onSeekDrag?: (time: number) => void, onSeekEnd?: (time: number) => void, emptyText?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -22,6 +22,7 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     
+    // Scale for high DPI displays if needed (keeping it simple for now)
     canvas.width = canvas.offsetWidth;
     canvas.height = canvas.offsetHeight;
     ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -33,7 +34,22 @@ function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, o
     
     const step = Math.ceil(data.length / targetWidth);
     
-    ctx.fillStyle = color;
+    let fillStyle: string | CanvasGradient = '';
+    if (Array.isArray(color)) {
+      const gradient = ctx.createLinearGradient(0, 0, 0, canvas.height);
+      gradient.addColorStop(0, color[0]);
+      gradient.addColorStop(1, color[1] || color[0]);
+      fillStyle = gradient;
+    } else {
+      fillStyle = color;
+    }
+    
+    ctx.fillStyle = fillStyle;
+    
+    // Glowing neon effect for waveform
+    ctx.shadowBlur = 10;
+    ctx.shadowColor = Array.isArray(color) ? color[0] : color;
+
     for (let i = 0; i < targetWidth; i++) {
       let sum = 0;
       for (let j = 0; j < step; j++) {
@@ -517,6 +533,7 @@ export default function KaraokeStudio() {
 
   const [trackMuted, setTrackMuted] = useState(false);
   const [vocalMuted, setVocalMuted] = useState(false);
+  const [showFullLyrics, setShowFullLyrics] = useState(false);
 
   const effectiveTrackVolume = trackMuted ? 0 : mixSettings.trackVolume;
   const effectiveVocalVolume = vocalMuted || (activeTab === 'SYNC' || activeTab === 'EDIT') ? 0 : mixSettings.vocalVolume;
@@ -728,32 +745,32 @@ export default function KaraokeStudio() {
   const hasSyncedLines = lyrics.some(l => l.start !== null);
 
   return (
-    <div className="min-h-screen bg-[#0d0e12] text-[#fafafa] font-sans flex flex-col overflow-hidden">
+    <div className="h-screen flex flex-col bg-[#0B0E14] text-[#fafafa] font-sans relative overflow-hidden">
       
       {/* HEADER */}
-      <header className="h-16 shrink-0 flex items-center justify-between border-b border-[#1f222b] bg-[#16181f] px-8 shadow-sm">
+      <header className="h-16 shrink-0 flex items-center justify-between border-b border-white/10 bg-[#161B22] px-8 shadow-sm z-10">
         
         {/* LEFT SIDE: Brand & Tabs */}
         <div className="flex items-center gap-6">
           <h1 className="text-lg font-black tracking-tighter text-white flex items-center gap-2">
-            <Mic2 className="w-5 h-5 text-[#38bdf8]" />
+            <Mic2 className="w-5 h-5 text-white" />
             KARAOKE STUDIO
           </h1>
           
           <div className="h-6 w-px bg-[#1f222b]" />
           
           {/* VIEW TOGGLE */}
-          <div className="flex bg-[#0d0e12] p-1 rounded-md border border-[#1f222b]">
-            <button onClick={() => setActiveTab("MIXER")} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "MIXER" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎛️ Mixer</button>
-            <button onClick={() => setActiveTab("SYNC")} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "SYNC" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎮 Sync</button>
-            <button onClick={() => setActiveTab("EDIT")} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "EDIT" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>✂️ Edit</button>
+          <div className="flex bg-white/5 p-1 rounded-full border border-white/5">
+            <button onClick={() => setActiveTab("MIXER")} className={`px-5 py-1.5 rounded-full text-xs font-medium transition-all ${activeTab === "MIXER" ? "bg-white/10 text-white shadow-sm" : "text-[#a1a1aa] hover:text-[#fafafa]"}`}>Mixer</button>
+            <button onClick={() => setActiveTab("SYNC")} className={`px-5 py-1.5 rounded-full text-xs font-medium transition-all ${activeTab === "SYNC" ? "bg-white/10 text-white shadow-sm" : "text-[#a1a1aa] hover:text-[#fafafa]"}`}>Sync</button>
+            <button onClick={() => setActiveTab("EDIT")} className={`px-5 py-1.5 rounded-full text-xs font-medium transition-all ${activeTab === "EDIT" ? "bg-white/10 text-white shadow-sm" : "text-[#a1a1aa] hover:text-[#fafafa]"}`}>Edit</button>
           </div>
         </div>
 
         {/* RIGHT SIDE: Transport & Actions */}
         <div className="flex items-center gap-6">
           {/* Transport Controls */}
-          <div className="flex items-center gap-3 bg-[#0d0e12] p-1.5 rounded-full border border-[#1f222b]">
+          <div className="flex items-center gap-3 bg-transparent p-1.5 rounded-full border border-white/10">
             <button 
               onClick={handlePlayPauseClick} 
               disabled={isRecording || !trackBuffer}
@@ -798,17 +815,17 @@ export default function KaraokeStudio() {
               <>
                 <button
                   onClick={() => document.getElementById('file-upload')?.click()}
-                  className="px-4 py-2 bg-[#1f222b] hover:bg-[#38bdf8] hover:text-gray-900 text-[#a1a1aa] rounded-md text-xs font-bold tracking-wide transition-all disabled:opacity-50 disabled:pointer-events-none"
+                  className="px-5 py-2 bg-white/5 hover:bg-white/10 text-white rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none"
                   title="Upload Instrumental"
                 >
-                  📤 Upload Track
+                  Upload Track
                 </button>
                 <button
                   onClick={handleExportClick}
                   disabled={isProcessing || !recordedBlob}
-                  className="px-4 py-2 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_10px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
+                  className="px-5 py-2 bg-white text-black hover:bg-gray-200 rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
                 >
-                  {isProcessing ? 'PROCESSING...' : '⬇️ Download Mixed Song'}
+                  {isProcessing ? 'Processing...' : 'Download Mix'}
                 </button>
               </>
             )}
@@ -817,17 +834,17 @@ export default function KaraokeStudio() {
               <>
                 <button
                   onClick={() => document.getElementById('lrc-upload')?.click()}
-                  className="px-4 py-2 bg-[#1f222b] hover:bg-[#38bdf8] hover:text-gray-900 text-[#a1a1aa] rounded-md text-xs font-bold tracking-wide transition-all disabled:opacity-50 disabled:pointer-events-none"
+                  className="px-5 py-2 bg-white/5 hover:bg-white/10 text-white rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none"
                   title="Upload LRC"
                 >
-                  📄 Upload .LRC
+                  Upload .LRC
                 </button>
                 <button
                   onClick={handleExportLRC}
                   disabled={lyrics.length === 0 || !trackFile}
-                  className="px-4 py-2 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_10px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
+                  className="px-5 py-2 bg-white text-black hover:bg-gray-200 rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
                 >
-                  ⬇️ Download .LRC
+                  Download .LRC
                 </button>
               </>
             )}
@@ -840,7 +857,7 @@ export default function KaraokeStudio() {
       </header>
 
       {/* TIMELINE AREA */}
-      <div className="flex-1 p-8 overflow-y-auto">
+      <div className={`flex-1 ${activeTab === 'MIXER' ? 'p-8 overflow-y-auto' : 'p-4 md:p-8 flex flex-col overflow-hidden min-h-0'}`}>
         {activeTab === 'MIXER' ? (
           <div className="max-w-6xl mx-auto space-y-6">
             
@@ -866,48 +883,101 @@ export default function KaraokeStudio() {
                 }
                 
                 return (
-                  <div className="bg-[#16181f] border border-[#1f222b] rounded-lg p-6 flex flex-col items-center justify-center min-h-[120px] shadow-sm">
-                    <div className="flex flex-wrap justify-center gap-x-2">
-                      {currentLine ? (() => {
-                        let progress = 0;
-                        if (currentLine.start !== null && currentLine.end !== null && currentTime >= currentLine.start) {
-                          if (currentTime >= currentLine.end) {
-                            progress = 100;
-                          } else {
-                            progress = ((currentTime - currentLine.start) / (currentLine.end - currentLine.start)) * 100;
-                          }
-                        }
-                        return (
-                          <span
-                            className="mx-1 text-4xl md:text-5xl font-black drop-shadow-[0_0_8px_rgba(56,189,248,0.3)] transition-colors"
-                            style={{
-                              backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`,
-                              WebkitBackgroundClip: 'text',
-                              WebkitTextFillColor: 'transparent',
-                              display: 'inline-block',
-                              lineHeight: '1.4'
-                            }}
-                          >
-                            {currentLine.text}
-                          </span>
-                        );
-                      })() : (
-                        <span className="text-3xl font-black text-[#71717a] text-center drop-shadow-md tracking-tight">
-                          {currentText}
+                  <div className={`bg-[#161B22] border border-white/10 rounded-xl p-8 md:p-12 flex flex-col items-center justify-center shadow-sm relative overflow-hidden transition-all ${showFullLyrics ? 'h-[500px]' : 'min-h-[260px]'}`}>
+                    <button 
+                      onClick={() => setShowFullLyrics(!showFullLyrics)}
+                      className="absolute top-4 right-4 z-20 px-3 py-1.5 bg-white/5 hover:bg-white/10 text-[#a1a1aa] hover:text-white rounded-md text-xs font-medium transition-colors border border-white/5"
+                    >
+                      {showFullLyrics ? 'Collapse Lyrics' : 'View Full Lyrics'}
+                    </button>
+                    
+                    {showFullLyrics ? (
+                      <div className="w-full h-full overflow-y-auto custom-scrollbar px-4 py-8">
+                        <div className="max-w-3xl mx-auto flex flex-col items-start">
+                          {lyrics.map((line, idx) => {
+                            const isCurrent = currentIdx === idx;
+                            let progress = 0;
+                            if (line.start !== null && currentTime >= line.start) {
+                              if (isCurrent && line.end !== null) {
+                                progress = Math.min(100, Math.max(0, ((currentTime - line.start) / (line.end - line.start)) * 100));
+                              } else {
+                                progress = 100;
+                              }
+                            }
+                            
+                            if (line.text.trim() === '') return <div key={line.id} className="h-4 w-full" />;
+                            
+                            return (
+                              <div 
+                                key={line.id} 
+                                className={`mb-6 w-full ${isCurrent ? 'scale-105 origin-left' : 'opacity-70'} transition-all`}
+                                ref={isCurrent ? (el) => el?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : null}
+                              >
+                                <span 
+                                  className="text-2xl md:text-3xl font-extrabold tracking-tight transition-all duration-75 block text-left"
+                                  style={{ 
+                                    backgroundImage: `linear-gradient(to right, #1db954 ${progress}%, #52525b ${progress}%)`,
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    filter: isCurrent && progress > 0 ? 'drop-shadow(0 0 10px rgba(29,185,84,0.3))' : 'none'
+                                  }}
+                                >
+                                  {line.text}
+                                </span>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      </div>
+                    ) : (
+                      <>
+                        <div className="flex flex-wrap justify-center gap-x-2 z-10 w-full mt-4">
+                          {currentLine ? (() => {
+                            let progress = 0;
+                            if (currentLine.start !== null && currentLine.end !== null && currentTime >= currentLine.start) {
+                              if (currentTime >= currentLine.end) {
+                                progress = 100;
+                              } else {
+                                progress = ((currentTime - currentLine.start) / (currentLine.end - currentLine.start)) * 100;
+                              }
+                            } else if (currentLine.start !== null && currentLine.end === null && currentTime >= currentLine.start) {
+                              progress = 100;
+                            }
+                            
+                            return (
+                              <div className="relative inline-block text-center px-4 w-full">
+                                <span 
+                                  className="text-4xl md:text-5xl font-extrabold inline-block mx-1 leading-tight tracking-tight transition-all duration-75"
+                                  style={{ 
+                                    backgroundImage: `linear-gradient(to right, #1db954 ${progress}%, #52525b ${progress}%)`,
+                                    WebkitBackgroundClip: 'text',
+                                    WebkitTextFillColor: 'transparent',
+                                    filter: progress > 0 ? 'drop-shadow(0 0 12px rgba(29,185,84,0.3))' : 'none'
+                                  }}
+                                >
+                                  {currentLine.text}
+                                </span>
+                              </div>
+                            );
+                          })() : (
+                            <span className="text-4xl md:text-5xl font-extrabold text-[#52525b] text-center tracking-tight">
+                              {currentText}
+                            </span>
+                          )}
+                        </div>
+                        <span className="text-base md:text-lg font-medium text-[#71717a] text-center mt-6">
+                          {nextText}
                         </span>
-                      )}
-                    </div>
-                    <span className="text-sm font-medium text-[#71717a] text-center mt-3">
-                      {nextText}
-                    </span>
+                      </>
+                    )}
                   </div>
                 );
               })()
             )}
 
           {/* TRACK 1: BACKING TRACK */}
-          <div className="flex h-36 border border-[#1f222b] bg-[#16181f] rounded-lg overflow-hidden shadow-sm">
-            <div className="w-72 p-5 flex flex-col justify-between border-r border-[#1f222b] shrink-0 bg-[#16181f]">
+          <div className="flex h-36 border border-white/10 bg-[#161B22] rounded-xl overflow-hidden shadow-sm">
+            <div className="w-72 p-5 flex flex-col justify-between border-r border-white/10 shrink-0 bg-[#161B22]">
               <div className="flex-1">
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2 overflow-hidden pr-2">
@@ -917,10 +987,10 @@ export default function KaraokeStudio() {
                     {trackBuffer && (
                       <button 
                         onClick={handlePlayPauseClick} 
-                        className={`w-6 h-6 rounded border flex items-center justify-center transition-all ${
+                        className={`w-6 h-6 rounded-xl border flex items-center justify-center transition-all ${
                           (isPlaying) || (isRecording && !isRecPaused)
                             ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]'
-                            : 'bg-[#0d0e12] border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white'
+                            : 'bg-transparent border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white'
                         }`}
                         title="Play/Pause Mix"
                       >
@@ -929,14 +999,14 @@ export default function KaraokeStudio() {
                     )}
                     <button 
                       onClick={() => setTrackMuted(!trackMuted)}
-                      className={`w-6 h-6 rounded border text-[10px] font-bold transition-all ${trackMuted ? 'bg-[#38bdf8] border-[#38bdf8] text-gray-900' : 'bg-[#0d0e12] border-[#3f3f46] text-[#a1a1aa] hover:border-[#38bdf8] hover:text-[#38bdf8]'}`}
+                      className={`w-6 h-6 rounded-xl border text-[10px] font-bold transition-all ${trackMuted ? 'bg-white border-[#38bdf8] text-black' : 'bg-transparent border-[#3f3f46] text-[#a1a1aa] hover:border-[#38bdf8] hover:text-white'}`}
                     >
                       M
                     </button>
                   </div>
                 </div>
                 {trackFile && <span className="text-xs text-[#71717a] font-medium truncate block">{trackFile.name}</span>}
-                {trackBuffer && <span className="text-[11px] font-mono text-[#38bdf8] mt-1.5 inline-block">{formatTime(currentTime)} / {formatTime(trackBuffer.duration)}</span>}
+                {trackBuffer && <span className="text-[11px] font-mono text-white mt-1.5 inline-block">{formatTime(currentTime)} / {formatTime(trackBuffer.duration)}</span>}
               </div>
               
               <div className="flex items-center gap-3">
@@ -952,17 +1022,17 @@ export default function KaraokeStudio() {
                     }
                     if (audioRef.current) audioRef.current.volume = Math.min(val / 100, 1);
                   }}
-                  className={`flex-1 h-1.5 rounded-full outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full transition-opacity ${trackMuted ? 'bg-[#0d0e12] opacity-50 [&::-webkit-slider-thumb]:bg-[#3f3f46]' : 'bg-[#1f222b] [&::-webkit-slider-thumb]:bg-[#38bdf8]'}`}
+                  className={`flex-1 h-1 bg-white/10 rounded-full outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white transition-opacity ${trackMuted ? 'opacity-50' : ''}`}
                 />
                 <span className={`text-xs font-mono w-7 text-right ${trackMuted ? 'text-[#3f3f46]' : 'text-[#a1a1aa]'}`}>{mixSettings.trackVolume}</span>
               </div>
             </div>
             
-            <div className={`flex-1 relative bg-[#0d0e12] transition-opacity ${trackMuted ? 'opacity-30' : 'opacity-100'}`}>
+            <div className={`flex-1 relative bg-transparent transition-opacity ${trackMuted ? 'opacity-30' : 'opacity-100'}`}>
               {trackBuffer ? (
                 <StaticWaveform 
                   buffer={trackBuffer} 
-                  color="#38bdf8" 
+                  color="#00E5FF" 
                   duration={trackBuffer.duration} 
                   currentTime={currentTime} 
                   totalDuration={masterDuration}
@@ -972,7 +1042,7 @@ export default function KaraokeStudio() {
                 <div className="absolute inset-0 flex items-center justify-center">
                   <button 
                     onClick={() => document.getElementById('file-upload')?.click()}
-                    className="border-2 border-dashed border-[#1f222b] px-6 py-2.5 rounded-lg text-sm font-medium text-[#71717a] hover:bg-[#16181f] hover:border-[#38bdf8] hover:text-[#38bdf8] transition-all"
+                    className="border-2 border-dashed border-white/10 px-6 py-2.5 rounded-xl text-sm font-medium text-[#71717a] hover:bg-[#161B22] hover:border-[#38bdf8] hover:text-white transition-all"
                   >
                     Click to Load Instrumental Track
                   </button>
@@ -983,22 +1053,29 @@ export default function KaraokeStudio() {
           </div>
 
           {/* TRACK 2: VOCALS */}
-          <div className="flex h-36 border border-[#1f222b] bg-[#16181f] rounded-lg overflow-hidden shadow-sm">
-            <div className="w-72 p-5 flex flex-col justify-between border-r border-[#1f222b] shrink-0 bg-[#16181f]">
+          <div className="flex h-36 border border-white/10 bg-[#161B22] rounded-xl overflow-hidden shadow-sm">
+            <div className="w-72 p-5 flex flex-col justify-between border-r border-white/10 shrink-0 bg-[#161B22]">
               <div className="flex-1">
                 <div className="flex justify-between items-start mb-2">
                   <div className="flex items-center gap-2 overflow-hidden pr-2">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${isRecording ? 'bg-[#ef4444] animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-[#3f3f46]'}`} />
                     <span className="font-bold text-sm text-white truncate">🎤 Your Voice</span>
+                    {(isPlaying || isRecording) && (
+                      <div className="flex items-end gap-[2px] h-3 ml-1 shrink-0">
+                        <div className="w-[3px] bg-[#F43F5E] animate-pulse h-full rounded-t-sm" />
+                        <div className="w-[3px] bg-[#F59E0B] animate-pulse-2 h-full rounded-t-sm" style={{ animationDelay: '0.2s' }} />
+                        <div className="w-[3px] bg-[#F43F5E] animate-pulse-3 h-full rounded-t-sm" style={{ animationDelay: '0.4s' }} />
+                      </div>
+                    )}
                   </div>
                   <div className="flex gap-2 shrink-0">
                     {vocalBuffer && (
                       <button 
                         onClick={handlePlayPauseClick} 
-                        className={`w-6 h-6 rounded border flex items-center justify-center transition-all ${
+                        className={`w-6 h-6 rounded-xl border flex items-center justify-center transition-all ${
                           (isPlaying) || (isRecording && !isRecPaused)
-                            ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.3)]'
-                            : 'bg-[#0d0e12] border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white'
+                            ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.3)] hover:scale-110'
+                            : 'bg-transparent border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white hover:scale-110'
                         }`}
                         title="Play/Pause Mix"
                       >
@@ -1007,7 +1084,8 @@ export default function KaraokeStudio() {
                     )}
                     <button 
                       onClick={() => setVocalMuted(!vocalMuted)}
-                      className={`w-6 h-6 rounded border text-[10px] font-bold transition-all ${vocalMuted ? 'bg-[#fb7185] border-[#fb7185] text-gray-900' : 'bg-[#0d0e12] border-[#3f3f46] text-[#a1a1aa] hover:border-[#fb7185] hover:text-[#fb7185]'}`}
+                      className={`w-6 h-6 rounded-xl border flex items-center justify-center transition-all ${vocalMuted ? 'bg-[#ef4444] border-[#ef4444] text-white shadow-[0_0_10px_rgba(239,68,68,0.3)] hover:scale-110' : 'bg-transparent border-[#3f3f46] text-[#71717a] hover:text-white hover:border-[#71717a] hover:scale-110'}`}
+                      title={vocalMuted ? "Unmute Vocals" : "Mute Vocals"}
                     >
                       M
                     </button>
@@ -1028,13 +1106,13 @@ export default function KaraokeStudio() {
                       setVocalVolumeLive(val);
                     }
                   }}
-                  className={`flex-1 h-1.5 rounded-full outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full transition-opacity ${vocalMuted ? 'bg-[#0d0e12] opacity-50 [&::-webkit-slider-thumb]:bg-[#3f3f46]' : 'bg-[#1f222b] [&::-webkit-slider-thumb]:bg-[#fb7185]'}`}
+                  className={`flex-1 h-1 bg-white/10 rounded-full outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-3 [&::-webkit-slider-thumb]:h-3 [&::-webkit-slider-thumb]:rounded-full [&::-webkit-slider-thumb]:bg-white transition-opacity ${vocalMuted ? 'opacity-50' : ''}`}
                 />
                 <span className={`text-xs font-mono w-7 text-right ${vocalMuted ? 'text-[#3f3f46]' : 'text-[#a1a1aa]'}`}>{mixSettings.vocalVolume}</span>
               </div>
             </div>
             
-            <div className={`flex-1 relative bg-[#0d0e12] transition-opacity ${vocalMuted ? 'opacity-30' : 'opacity-100'}`}>
+            <div className={`flex-1 relative bg-transparent transition-opacity ${vocalMuted ? 'opacity-30' : 'opacity-100'}`}>
               {isRecording ? (
                 <div className="absolute inset-0">
                   <canvas ref={canvasRef} className="w-full h-full" />
@@ -1042,7 +1120,7 @@ export default function KaraokeStudio() {
               ) : vocalBuffer ? (
                 <StaticWaveform 
                   buffer={vocalBuffer} 
-                  color="#fb7185" 
+                  color="#8B5CF6" 
                   duration={vocalBuffer.duration} 
                   currentTime={currentTime}
                   totalDuration={masterDuration}
@@ -1051,19 +1129,17 @@ export default function KaraokeStudio() {
               ) : (
                 <StaticWaveform 
                   buffer={null} 
-                  color="#fb7185" 
+                  color="#8B5CF6" 
                   duration={0} 
-                  currentTime={currentTime}
-                  totalDuration={masterDuration}
-                  onSeekStart={handleSeekStart} onSeekDrag={handleSeekDrag} onSeekEnd={handleSeekEnd}
-                  emptyText="Ready to record vocals"
+                  currentTime={0} 
+                  emptyText="Ready to Record"
                 />
               )}
             </div>
           </div>
 
           {/* MASTER BUS SETTINGS (Docked at bottom) */}
-          <div className="p-6 bg-[#16181f] border border-[#1f222b] rounded-lg flex flex-col md:flex-row gap-8 shadow-sm">
+          <div className="p-6 bg-[#161B22] border border-white/10 rounded-xl flex flex-col md:flex-row gap-8 shadow-sm">
             <div className="flex-1">
               <h3 className="text-xs font-bold text-[#71717a] uppercase tracking-wider mb-4 flex items-center gap-2">
                 ⏱️ Sync & Mic Delay
@@ -1074,26 +1150,26 @@ export default function KaraokeStudio() {
                   type="range" min="-300" max="300" 
                   value={mixSettings.latencyOffsetMs}
                   onChange={(e) => updateSetting('latencyOffsetMs', Number(e.target.value))}
-                  className="flex-1 h-1.5 bg-[#1f222b] rounded-full outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-[#38bdf8] [&::-webkit-slider-thumb]:rounded-full"
+                  className="flex-1 h-1 bg-white/10 rounded-full outline-none appearance-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-4 [&::-webkit-slider-thumb]:h-4 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full"
                 />
-                <span className="text-sm font-mono font-medium text-[#38bdf8] w-14 text-right">{mixSettings.latencyOffsetMs}ms</span>
+                <span className="text-sm font-mono font-medium text-white w-14 text-right">{mixSettings.latencyOffsetMs}ms</span>
               </div>
               <span className="text-xs font-medium text-[#71717a] mt-3 block">
                 Nudge timing backward or forward if your Bluetooth microphone is out of sync.
               </span>
             </div>
             
-            <div className="flex-1 md:border-l border-[#1f222b] md:pl-8 pt-6 md:pt-0 border-t md:border-t-0">
+            <div className="flex-1 md:border-l border-white/10 md:pl-8 pt-6 md:pt-0 border-t md:border-t-0">
               <h3 className="text-xs font-bold text-[#71717a] uppercase tracking-wider mb-4 flex items-center gap-2">
                 🎛️ Master Effects
               </h3>
-              <div className="flex items-center justify-between bg-[#0d0e12] p-3 rounded border border-[#1f222b]">
-                <span className="text-sm font-medium text-[#fafafa]">Studio Reverb (Vocals)</span>
+              <div className={`flex items-center justify-between p-3 rounded-xl border transition-all ${mixSettings.reverbEnabled ? 'bg-[#8B5CF6]/10 border-[#8B5CF6]/50 shadow-[0_0_15px_rgba(139,92,246,0.15)]' : 'bg-transparent border-white/10'}`}>
+                <span className={`text-sm font-bold ${mixSettings.reverbEnabled ? 'text-[#8B5CF6] drop-shadow-[0_0_8px_rgba(139,92,246,0.5)]' : 'text-[#fafafa]'}`}>Studio Reverb (Vocals)</span>
                 <button 
                   onClick={() => updateSetting('reverbEnabled', !mixSettings.reverbEnabled)}
-                  className={`w-11 h-6 rounded-full transition-all relative border ${mixSettings.reverbEnabled ? 'bg-[#38bdf8] border-[#38bdf8]' : 'bg-[#1f222b] border-[#3f3f46]'}`}
+                  className={`w-14 h-7 rounded-full transition-all relative border-2 flex items-center shadow-inner ${mixSettings.reverbEnabled ? 'bg-gradient-to-r from-[#8B5CF6] to-[#06B6D4] border-transparent shadow-[0_0_15px_rgba(139,92,246,0.6)]' : 'bg-[#1f222b] border-[#3f3f46]'}`}
                 >
-                  <div className={`absolute top-0.5 left-0.5 w-4 h-4 rounded-full bg-white transition-transform ${mixSettings.reverbEnabled ? 'translate-x-5' : ''}`} />
+                  <div className={`w-5 h-5 rounded-full bg-white transition-all shadow-md transform ${mixSettings.reverbEnabled ? 'translate-x-7 scale-110 drop-shadow-[0_0_5px_white]' : 'translate-x-0.5'}`} />
                 </button>
               </div>
               <span className="text-xs font-medium text-[#71717a] mt-3 block">
@@ -1103,14 +1179,14 @@ export default function KaraokeStudio() {
           </div>
           </div>
         ) : (
-          <div className="flex-1 flex flex-col min-h-0 bg-[#0d0e12] overflow-hidden p-4 gap-4">
+          <div className="flex-1 flex flex-col min-h-0 bg-transparent overflow-hidden gap-4">
             {lyrics.length === 0 ? (
               <div className="flex-1 flex flex-col max-w-2xl mx-auto w-full pt-8">
                 <label className="text-sm font-bold text-gray-400 mb-2">Paste Lyrics</label>
                 <textarea
                   value={rawLyricsText}
                   onChange={e => setRawLyricsText(e.target.value)}
-                  className="flex-1 bg-[#16181f] text-gray-200 p-4 rounded border border-[#1f222b] focus:outline-none focus:border-[#38bdf8] resize-none"
+                  className="flex-1 bg-[#161B22] text-gray-200 p-4 rounded-xl border border-white/10 focus:outline-none focus:border-[#38bdf8] resize-none"
                   placeholder="Paste lyrics here..."
                 />
                 <button 
@@ -1118,59 +1194,62 @@ export default function KaraokeStudio() {
                     const lines = rawLyricsText.split('\n').map(l => l.trim()).filter(l => l);
                     setLyrics(lines.map((text, idx) => ({ id: `line-${Date.now()}-${idx}`, text, start: null, end: null })));
                   }}
-                  className="w-full mt-4 py-3 bg-[#38bdf8] text-gray-900 rounded font-bold hover:bg-[#0ea5e9] transition-colors"
+                  className="w-full mt-4 py-3 bg-white text-black rounded font-bold hover:bg-[#0ea5e9] transition-colors"
                 >
                   Generate Timeline
                 </button>
               </div>
             ) : activeTab === "SYNC" ? (
               <div className="flex-1 flex flex-col h-full gap-4 min-h-0">
-                <div className="flex flex-col items-center justify-center py-4 border-b border-[#1f222b] bg-[#1a1d24]">
+                <div className="shrink-0 flex flex-col items-center justify-center py-4 border border-white/10 rounded-xl bg-[#161B22] shadow-sm">
                   <div className="flex items-center justify-between w-full max-w-5xl px-4">
-                    {/* Left: Secondary Actions (Review) */}
+                    {/* Left: Secondary Actions (Empty) */}
                     <div className="flex items-center gap-3 w-1/3 justify-start">
-                      {!isSyncSessionActive && hasSyncedLines && !isPlaying && (
-                        <button
-                          onClick={() => {
-                            if (audioRef.current) audioRef.current.currentTime = 0;
-                            setCurrentTime(0);
-                            setActiveLineIndex(0);
-                            setIsSyncSessionActive(false);
-                            startPlayback(0);
-                          }}
-                          disabled={!hasSyncedLines}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-[#38bdf8]/10 hover:bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/30 rounded-full font-bold text-sm transition-colors disabled:opacity-50"
-                        >
-                          👀 Review Sync
-                        </button>
-                      )}
                     </div>
 
                     {/* Center: Primary Sync Actions */}
-                    <div className="flex items-center justify-center gap-3 w-1/3">
+                    <div className="flex items-center justify-center gap-3 w-1/3 whitespace-nowrap">
                       <button 
                         onClick={(e) => { 
                           e.currentTarget.blur(); 
-                          if (isPlaying && isSyncSessionActive) {
-                            triggerSyncTap();
-                          } else if (isPlaying && !isSyncSessionActive) {
-                            // Active Review Sync -> Stop it
-                            stopPreview();
-                          } else if (!isPlaying && currentTime === 0) {
-                            setIsSyncSessionActive(true);
-                            if (audioRef.current) audioRef.current.currentTime = 0;
-                            setCurrentTime(0);
-                            setActiveLineIndex(0);
-                            startPlayback(0);
-                          } else if (!isPlaying && currentTime > 0) {
-                            setIsSyncSessionActive(true);
-                            startPlayback(currentTime);
+                          if (isPlaying) {
+                            if (isSyncSessionActive) {
+                              triggerSyncTap();
+                            } else {
+                              stopPreview();
+                            }
+                          } else {
+                            if (isSyncSessionActive) {
+                              startPlayback(currentTime);
+                            } else {
+                              if (hasSyncedLines) {
+                                if (currentTime === 0) {
+                                  if (audioRef.current) audioRef.current.currentTime = 0;
+                                  setActiveLineIndex(0);
+                                }
+                                startPlayback(currentTime);
+                              } else {
+                                setIsSyncSessionActive(true);
+                                if (audioRef.current) audioRef.current.currentTime = 0;
+                                setCurrentTime(0);
+                                setActiveLineIndex(0);
+                                startPlayback(0);
+                              }
+                            }
                           }
                         }}
-                        disabled={!trackUrl || (!isPlaying && currentTime > 0 && !isSyncSessionActive && !hasSyncedLines) || (!isSyncSessionActive && hasSyncedLines && currentTime === 0 && !isPlaying)}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-full font-black text-sm transition-transform hover:scale-105 ${isPlaying && isSyncSessionActive ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : isPlaying && !isSyncSessionActive ? 'bg-[#f59e0b] text-white shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'bg-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'} disabled:opacity-50`}
+                        disabled={!trackUrl}
+                        className={`flex items-center justify-center gap-2 px-6 py-2.5 rounded-full font-bold text-sm transition-transform hover:scale-105 ${isPlaying && isSyncSessionActive ? 'bg-red-500 text-white' : isPlaying && !isSyncSessionActive ? 'bg-amber-500 text-black' : 'bg-white text-black'} disabled:opacity-50 min-w-[200px]`}
                       >
-                        {isPlaying && isSyncSessionActive ? 'Tap to Sync Line (Spacebar)' : isPlaying && !isSyncSessionActive ? '⏸ Stop Review' : (!isPlaying && currentTime > 0 ? '▶ Resume Syncing' : '▶ START SYNCING')}
+                        {isPlaying 
+                          ? (isSyncSessionActive ? 'Tap Spacebar to Sync' : '⏸ Stop Review') 
+                          : (isSyncSessionActive 
+                              ? '▶ Resume Syncing' 
+                              : (hasSyncedLines 
+                                  ? (currentTime > 0 ? '▶ Resume Review' : '▶ Review Sync') 
+                                  : '▶ Start Syncing')
+                            )
+                        }
                       </button>
 
                       {isSyncSessionActive && (
@@ -1180,15 +1259,15 @@ export default function KaraokeStudio() {
                             if (isPlaying) stopPreview();
                             setIsSyncSessionActive(false);
                           }}
-                          className="flex items-center gap-2 px-5 py-2.5 bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30 rounded-full font-bold text-sm transition-colors"
+                          className="flex items-center justify-center gap-2 px-6 py-2.5 bg-[#1ed760] hover:bg-[#1db954] text-black rounded-full font-bold text-sm transition-colors"
                         >
-                          ✓ FINISH
+                          ✓ Finish
                         </button>
                       )}
                     </div>
 
                     {/* Right: Danger Actions (Clear/Restart) */}
-                    <div className="flex items-center gap-3 w-1/3 justify-end">
+                    <div className="flex items-center gap-3 w-1/3 justify-end whitespace-nowrap">
                       <button 
                         onClick={(e) => {
                           e.stopPropagation();
@@ -1204,7 +1283,7 @@ export default function KaraokeStudio() {
                           setIsSyncSessionActive(false);
                         }}
                         disabled={!hasSyncedLines && currentTime === 0}
-                        className="px-4 py-2 bg-orange-500/10 text-orange-500 text-xs font-bold rounded-full hover:bg-orange-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed border border-orange-500/20"
+                        className="px-4 py-2.5 bg-transparent text-white/70 hover:text-white text-xs font-medium rounded-full hover:bg-white/5 transition-colors border border-white/10 disabled:opacity-30"
                       >
                         🔄 Restart Sync
                       </button>
@@ -1223,20 +1302,20 @@ export default function KaraokeStudio() {
                           setIsSpacebarDown(false); 
                           setIsSyncSessionActive(false);
                         }
-                      }} className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold rounded-full transition-colors border border-red-500/20">
+                      }} className="px-4 py-2.5 bg-transparent hover:bg-red-500/10 text-red-500 text-xs font-medium rounded-full transition-colors border border-red-500/30">
                         Clear All Lyrics
                       </button>
                     </div>
                   </div>
                 </div>
                 <div 
-                  className={`flex-1 overflow-y-auto custom-scrollbar bg-[#16181f] rounded border border-[#1f222b] p-8 flex flex-col items-center relative transition-colors select-none ${isSpacebarDown ? 'border-[#38bdf8] bg-[#38bdf8]/10' : ''}`}
+                  className={`flex-1 overflow-y-auto custom-scrollbar bg-[#161B22] rounded-xl border border-white/10 p-8 flex flex-col items-center relative transition-colors select-none ${isSpacebarDown ? 'border-[#38bdf8] bg-white/10' : ''}`}
                 >
                    {lyrics.length === 0 ? (
                      <div className="flex flex-col items-center justify-center h-full text-center max-w-md">
                        <h3 className="text-xl font-bold text-white mb-2">No Lyrics Yet</h3>
                        <p className="text-[#a1a1aa] mb-6">Upload an LRC file or type your lyrics in the Editor tab first.</p>
-                       <button onClick={() => setActiveTab("EDIT")} className="px-6 py-2 bg-[#38bdf8] text-gray-900 rounded-full font-bold shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:bg-[#0ea5e9] transition-colors">Go to Editor</button>
+                       <button onClick={() => setActiveTab("EDIT")} className="px-6 py-2 bg-white text-black rounded-full font-bold shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:bg-[#0ea5e9] transition-colors">Go to Editor</button>
                      </div>
                    ) : (
                      lyrics.map((line, idx) => {
@@ -1252,14 +1331,14 @@ export default function KaraokeStudio() {
                       
                       // Unsynced lines are dim gray during sync session, otherwise normal text color
                       let textColor = '#71717a';
-                      if (isSung || (isTarget && (isSyncSessionActive || isPlaying))) textColor = '#38bdf8';
+                      if (isSung || (isTarget && (isSyncSessionActive || isPlaying))) textColor = '#ffffff';
                       else if (!isSyncSessionActive && !isSynced) textColor = '#fafafa';
 
                       const isLastSyncedLine = isSynced && (idx === lyrics.length - 1 || lyrics[idx + 1].start === null);
                       const showResumeShortcut = !isSyncSessionActive && isLastSyncedLine && idx < lyrics.length - 1;
 
                       return (
-                        <div key={line.id} className="flex flex-col items-center mb-8">
+                        <div key={line.id} className="flex flex-col mb-8 relative w-full max-w-2xl">
                           <div 
                             ref={isTarget && (isSyncSessionActive || isPlaying) ? (el) => {
                               if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
@@ -1278,17 +1357,18 @@ export default function KaraokeStudio() {
                                 setActiveLineIndex(idx);
                               }
                             }}
-                            className={`flex items-center justify-center gap-3 transition-all cursor-pointer hover:scale-105 ${isTarget && (isSyncSessionActive || isPlaying) ? 'scale-110 drop-shadow-[0_0_15px_rgba(56,189,248,0.5)]' : 'opacity-70 hover:opacity-100'}`} 
+                            className={`flex items-start justify-start gap-4 transition-all cursor-pointer hover:scale-105 origin-left ${isTarget && (isSyncSessionActive || isPlaying) ? 'scale-110 drop-shadow-md' : 'opacity-70 hover:opacity-100'}`} 
                           >
-                            {isTarget && (isSyncSessionActive || isPlaying) && <div className="text-[#38bdf8] animate-pulse text-xl md:text-3xl">▶</div>}
+                            {/* Sleek active indicator bar */}
+                            <div className={`w-1.5 h-8 mt-1.5 rounded-full shrink-0 transition-all ${isTarget && (isSyncSessionActive || isPlaying) ? 'bg-[#1db954] opacity-100 shadow-[0_0_10px_#1db954]' : 'bg-transparent opacity-0'}`} />
+                            
                             <div 
-                              className="text-2xl md:text-4xl font-black text-center transition-colors duration-200 flex items-center gap-4"
+                              className="text-3xl md:text-4xl font-bold transition-colors duration-200 flex items-start justify-start gap-4 flex-1"
                               style={{ color: textColor }}
                             >
-                              <span className="text-xl md:text-2xl font-mono opacity-30 shrink-0">{idx + 1}.</span>
-                              {line.text}
+                              <span className="text-xl md:text-2xl font-mono opacity-30 shrink-0 w-8 text-right mt-1.5">{idx + 1}.</span>
+                              <span className="flex-1 text-left leading-tight">{line.text}</span>
                             </div>
-                            {isTarget && (isSyncSessionActive || isPlaying) && <div className="text-[#38bdf8] animate-pulse text-xl md:text-3xl">◀</div>}
                           </div>
                           
                           {showResumeShortcut && (
@@ -1317,7 +1397,7 @@ export default function KaraokeStudio() {
                 <div className="text-center text-sm font-bold text-[#71717a] py-2 mb-2">
                   Drag the blocks or the left/right handles to fine-tune the timing.
                 </div>
-                <div className="flex-1 shrink-0 bg-[#0d0e12] rounded border border-[#1f222b]">
+                <div className="flex-1 shrink-0 bg-transparent rounded-xl border border-white/10">
                   <WaveformEditor trackUrl={trackUrl!} lyrics={lyrics} onUpdateLine={handleLineUpdate} />
                 </div>
               </div>
