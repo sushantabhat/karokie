@@ -179,6 +179,7 @@ export default function KaraokeStudio() {
   const [activeTab, setActiveTab] = useState<Tab>("MIXER");
   const [activeLineIndex, setActiveLineIndex] = useState(0);
   const [isSpacebarDown, setIsSpacebarDown] = useState(false);
+  const [isSyncSessionActive, setIsSyncSessionActive] = useState(false);
 
   const [rawLyricsText, setRawLyricsText] = useState("");
   const [lyrics, setLyrics] = useState<LineSync[]>([]);
@@ -410,11 +411,39 @@ export default function KaraokeStudio() {
       }, 100);
     } else if (isPlaying) {
       interval = setInterval(() => {
-        setCurrentTime(prev => prev + 0.1);
+        setCurrentTime(prev => {
+          const nextTime = prev + 0.1;
+          
+          // Auto-stop when reviewing synced lyrics in SYNC tab
+          setLyrics(currentLyrics => {
+            if (activeTab === "SYNC" && !isSyncSessionActive && currentLyrics.length > 0) {
+              let lastSyncedLyric = null;
+              for (let i = currentLyrics.length - 1; i >= 0; i--) {
+                if (currentLyrics[i].start !== null) {
+                  lastSyncedLyric = currentLyrics[i];
+                  break;
+                }
+              }
+              
+              if (lastSyncedLyric) {
+                const stopTime = lastSyncedLyric.end !== null ? lastSyncedLyric.end + 1.0 : lastSyncedLyric.start! + 4.0;
+                if (nextTime >= stopTime) {
+                  setTimeout(() => {
+                    stopPreview();
+                    if (audioRef.current) audioRef.current.currentTime = 0;
+                  }, 0);
+                }
+              }
+            }
+            return currentLyrics;
+          });
+          
+          return nextTime;
+        });
       }, 100);
     }
     return () => clearInterval(interval);
-  }, [isRecording, isRecPaused, isPlaying]);
+  }, [isRecording, isRecPaused, isPlaying, isSyncSessionActive, activeTab, stopPreview]); 
 
   // Visualizer loop
   useEffect(() => {
@@ -567,6 +596,7 @@ export default function KaraokeStudio() {
     if (isRecording) handleStopRecording();
     if (isPlaying) stopPreview();
     setCurrentTime(0); // Reset playhead when stopped
+    setIsSyncSessionActive(false); // Gracefully exit sync mode on hard stop
   };
 
   const handlePlayPauseClick = () => {
@@ -635,35 +665,37 @@ export default function KaraokeStudio() {
     });
   };
 
+  const triggerSyncTap = () => {
+    setIsSpacebarDown(true);
+    setTimeout(() => setIsSpacebarDown(false), 150);
+    
+    setLyrics(prev => {
+       const next = [...prev];
+       const currIdx = activeLineIndex;
+       
+       if (currIdx < next.length) {
+          next[currIdx] = { ...next[currIdx], start: currentTime };
+       }
+       if (currIdx > 0 && currIdx <= next.length) {
+          next[currIdx - 1] = { ...next[currIdx - 1], end: currentTime };
+       }
+       return next;
+    });
+    
+    if (activeLineIndex <= lyrics.length) {
+      setActiveLineIndex(idx => idx + 1);
+    }
+  };
+
   // Spacebar Logic (Tap to advance)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (e.code === "Space" && e.target === document.body && activeTab === "SYNC") {
+      // Allow spacebar if not typing in an input
+      if (e.code === "Space" && e.target instanceof Element && e.target.tagName !== "INPUT" && e.target.tagName !== "TEXTAREA" && activeTab === "SYNC") {
         e.preventDefault();
         if (e.repeat) return;
-        
-        setIsSpacebarDown(true);
-        setTimeout(() => setIsSpacebarDown(false), 150); // visual flash
-        
-        setLyrics(prev => {
-           const next = [...prev];
-           const currIdx = activeLineIndex;
-           
-           if (currIdx < next.length) {
-              // Start current line
-              next[currIdx] = { ...next[currIdx], start: currentTime };
-           }
-           
-           if (currIdx > 0 && currIdx <= next.length) {
-              // End previous line
-              next[currIdx - 1] = { ...next[currIdx - 1], end: currentTime };
-           }
-           
-           return next;
-        });
-        
-        if (activeLineIndex <= lyrics.length) {
-          setActiveLineIndex(idx => idx + 1);
+        if (isSyncSessionActive && isPlaying) {
+          triggerSyncTap();
         }
       }
     };
@@ -672,7 +704,9 @@ export default function KaraokeStudio() {
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
     };
-  }, [activeLineIndex, activeTab, currentTime, lyrics.length]);
+  }, [activeLineIndex, activeTab, currentTime, lyrics.length, isSyncSessionActive, isPlaying]);
+
+  const hasSyncedLines = lyrics.some(l => l.start !== null);
 
   return (
     <div className="min-h-screen bg-[#0d0e12] text-[#fafafa] font-sans flex flex-col overflow-hidden">
@@ -714,7 +748,7 @@ export default function KaraokeStudio() {
             {/* Record Button */}
             <button 
               onClick={handleStartRecording}
-              disabled={isRecording || isPlaying || !trackFile}
+              disabled={isRecording || isPlaying || !trackFile || activeTab === "SYNC"}
               className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
                 isRecording 
                   ? 'bg-transparent border-2 border-[#ef4444] shadow-[0_0_20px_rgba(239,68,68,0.7)] animate-pulse' 
@@ -1076,48 +1110,173 @@ export default function KaraokeStudio() {
               </div>
             ) : activeTab === "SYNC" ? (
               <div className="flex-1 flex flex-col h-full gap-4 min-h-0">
-                <div className="flex flex-col items-center justify-center py-2 gap-4">
-                  <div className="text-sm font-bold text-[#71717a]">
-                    Tap <kbd className="bg-[#1f222b] px-2 py-1 rounded text-white mx-1">Spacebar</kbd> to start the next line.
-                  </div>
-                  <div className="flex gap-4">
-                    <button 
-                      onClick={handlePlayPauseClick}
-                      disabled={!trackUrl}
-                      className={`flex items-center gap-2 px-6 py-3 rounded-full font-black text-sm transition-transform hover:scale-105 ${isPlaying ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'} disabled:opacity-50`}
-                    >
-                      {isPlaying ? '⏸ PAUSE' : '▶ PLAY SONG'}
-                    </button>
-                    <button 
-                      onClick={() => {
-                        if (audioRef.current) audioRef.current.currentTime = 0;
-                        setCurrentTime(0);
-                        setActiveLineIndex(0);
-                        setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null })));
-                      }}
-                      className="flex items-center gap-2 px-6 py-3 bg-[#1f222b] hover:bg-[#272a35] text-white rounded-full font-bold text-sm transition-colors"
-                    >
-                      🔄 Restart Sync
-                    </button>
+                <div className="flex flex-col items-center justify-center py-4 gap-4">
+                  <div className="flex items-center justify-center w-full max-w-4xl px-4">
+                    <div className="flex gap-4">
+                      <button 
+                        onClick={(e) => { 
+                          e.currentTarget.blur(); 
+                          if (isPlaying && isSyncSessionActive) {
+                            triggerSyncTap();
+                          } else if (!isPlaying && currentTime === 0) {
+                            setIsSyncSessionActive(true);
+                            if (audioRef.current) audioRef.current.currentTime = 0;
+                            setCurrentTime(0);
+                            setActiveLineIndex(0);
+                            playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, 0);
+                          } else if (!isPlaying && currentTime > 0) {
+                            setIsSyncSessionActive(true);
+                            playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, currentTime);
+                          }
+                        }}
+                        disabled={!trackUrl || (!isPlaying && currentTime > 0 && !isSyncSessionActive && !hasSyncedLines) || (!isSyncSessionActive && hasSyncedLines && currentTime === 0)}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-full font-black text-sm transition-transform hover:scale-105 ${isPlaying && isSyncSessionActive ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'} disabled:opacity-50`}
+                      >
+                        {isPlaying && isSyncSessionActive ? 'Tap to Sync Line (Spacebar)' : (!isPlaying && currentTime > 0 ? '▶ Resume Syncing' : '▶ START SYNCING')}
+                      </button>
+
+                      {isSyncSessionActive && (
+                        <button 
+                          onClick={(e) => {
+                            e.currentTarget.blur();
+                            if (isPlaying) stopPreview();
+                            setIsSyncSessionActive(false);
+                          }}
+                          className="flex items-center gap-2 px-6 py-3 bg-green-500/10 hover:bg-green-500/20 text-green-500 border border-green-500/30 rounded-full font-bold text-sm transition-colors"
+                        >
+                          ✓ FINISH / SAVE
+                        </button>
+                      )}
+
+                      {!isSyncSessionActive && (
+                        <button 
+                          onClick={(e) => {
+                            e.currentTarget.blur();
+                            if (audioRef.current) audioRef.current.currentTime = 0;
+                            setCurrentTime(0);
+                            setActiveLineIndex(0);
+                            setIsSyncSessionActive(false);
+                            playPreview({
+                              ...mixSettings,
+                              trackVolume: effectiveTrackVolume,
+                              vocalVolume: effectiveVocalVolume
+                            }, 0);
+                          }}
+                          disabled={!hasSyncedLines}
+                          className="flex items-center gap-2 px-6 py-3 bg-[#38bdf8]/10 hover:bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/30 rounded-full font-bold text-sm transition-colors disabled:opacity-50"
+                        >
+                          👀 Review Sync
+                        </button>
+                      )}
+                    </div>
                   </div>
                 </div>
-                <div className={`flex-1 overflow-y-auto custom-scrollbar bg-[#16181f] rounded border border-[#1f222b] p-8 flex flex-col items-center relative transition-colors ${isSpacebarDown ? 'border-[#38bdf8] bg-[#38bdf8]/5' : ''}`}>
-                   <div className="absolute top-4 right-4 flex gap-2">
-                     <button onClick={() => { setLyrics([]); setRawLyricsText(""); setActiveLineIndex(0); setIsSpacebarDown(false); }} className="px-3 py-1 bg-red-500/10 text-red-500 text-xs font-bold rounded hover:bg-red-500/20 transition-colors">Clear All</button>
+                <div 
+                  className={`flex-1 overflow-y-auto custom-scrollbar bg-[#16181f] rounded border border-[#1f222b] p-8 flex flex-col items-center relative transition-colors select-none ${isSpacebarDown ? 'border-[#38bdf8] bg-[#38bdf8]/10' : ''}`}
+                >
+                   <div className="absolute top-4 right-4 flex gap-2 z-10">
+                     <button 
+                       onClick={(e) => {
+                         e.stopPropagation();
+                         e.currentTarget.blur();
+                         if (isPlaying) stopPreview();
+                         if (audioRef.current) {
+                           audioRef.current.pause();
+                           audioRef.current.currentTime = 0;
+                         }
+                         setCurrentTime(0);
+                         setActiveLineIndex(0);
+                         setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null })));
+                         setIsSyncSessionActive(false);
+                       }}
+                       disabled={!hasSyncedLines && currentTime === 0}
+                       className="px-3 py-1 bg-orange-500/10 text-orange-500 text-xs font-bold rounded hover:bg-orange-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
+                     >
+                       🔄 Restart Sync
+                     </button>
+                     <button onClick={(e) => { 
+                       e.stopPropagation(); 
+                       if (window.confirm("Wipe all sync timings? This cannot be undone.")) {
+                         if (isPlaying) stopPreview();
+                         if (audioRef.current) {
+                           audioRef.current.pause();
+                           audioRef.current.currentTime = 0;
+                         }
+                         setCurrentTime(0);
+                         setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null }))); 
+                         setActiveLineIndex(0); 
+                         setIsSpacebarDown(false); 
+                         setIsSyncSessionActive(false);
+                       }
+                     }} className="px-3 py-1 bg-red-500/10 text-red-500 text-xs font-bold rounded hover:bg-red-500/20 transition-colors">Clear All</button>
                    </div>
-                   {lyrics.map((line) => {
-                      let progress = 0;
-                      if (line.start !== null && line.end !== null && currentTime >= line.start) {
-                        if (currentTime >= line.end) {
-                          progress = 100;
-                        } else {
-                          progress = ((currentTime - line.start) / (line.end - line.start)) * 100;
-                        }
-                      }
-                      const isTarget = activeLineIndex === lyrics.indexOf(line);
+                   {lyrics.map((line, idx) => {
+                      const isSynced = line.start !== null;
+                      const currentlyPlayingIdx = lyrics.findIndex(l => 
+                        l.start !== null && currentTime >= l.start && (l.end === null || currentTime < l.end)
+                      );
+                      const glowIndex = isSyncSessionActive ? activeLineIndex : (currentlyPlayingIdx !== -1 ? currentlyPlayingIdx : activeLineIndex);
+                      const isTarget = glowIndex === idx;
+                      
+                      // During an active sync, don't auto-highlight lines we haven't reached yet, even if they have old timestamps
+                      const isSung = isSynced && (currentTime >= line.start!) && (!isSyncSessionActive || idx < activeLineIndex);
+                      
+                      // Unsynced lines are dim gray during sync session, otherwise normal text color
+                      let textColor = '#71717a';
+                      if (isSung || (isTarget && (isSyncSessionActive || isPlaying))) textColor = '#38bdf8';
+                      else if (!isSyncSessionActive && !isSynced) textColor = '#fafafa';
+
+                      const isLastSyncedLine = isSynced && (idx === lyrics.length - 1 || lyrics[idx + 1].start === null);
+                      const showResumeShortcut = !isSyncSessionActive && isLastSyncedLine && idx < lyrics.length - 1;
+
                       return (
-                        <div key={line.id} className={`text-2xl md:text-4xl font-black mb-8 transition-all ${isTarget ? 'scale-110 drop-shadow-[0_0_15px_rgba(56,189,248,0.5)]' : 'opacity-70'}`} style={{ backgroundImage: `linear-gradient(to right, #38bdf8 ${progress}%, #71717a ${progress}%)`, WebkitBackgroundClip: 'text', WebkitTextFillColor: 'transparent' }}>
-                          {line.text}
+                        <div key={line.id} className="flex flex-col items-center mb-8">
+                          <div 
+                            ref={isTarget && (isSyncSessionActive || isPlaying) ? (el) => {
+                              if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                            } : null}
+                            onClick={() => {
+                              // Punch-in edit
+                              if (line.start !== null) {
+                                setCurrentTime(line.start);
+                                if (audioRef.current) audioRef.current.currentTime = line.start;
+                                setActiveLineIndex(idx);
+                                if (isSyncSessionActive && !isPlaying) {
+                                  playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, line.start);
+                                }
+                              } else {
+                                // Clicked unsynced line
+                                setActiveLineIndex(idx);
+                              }
+                            }}
+                            className={`flex items-center justify-center gap-3 transition-all cursor-pointer hover:scale-105 ${isTarget && (isSyncSessionActive || isPlaying) ? 'scale-110 drop-shadow-[0_0_15px_rgba(56,189,248,0.5)]' : 'opacity-70 hover:opacity-100'}`} 
+                          >
+                            {isTarget && (isSyncSessionActive || isPlaying) && <div className="text-[#38bdf8] animate-pulse text-xl md:text-3xl">▶</div>}
+                            <div 
+                              className="text-2xl md:text-4xl font-black text-center transition-colors duration-200"
+                              style={{ color: textColor }}
+                            >
+                              {line.text}
+                            </div>
+                            {isTarget && (isSyncSessionActive || isPlaying) && <div className="text-[#38bdf8] animate-pulse text-xl md:text-3xl">◀</div>}
+                          </div>
+                          
+                          {showResumeShortcut && (
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setActiveLineIndex(idx + 1);
+                                setIsSyncSessionActive(true);
+                                const startTime = line.end || line.start || currentTime;
+                                setCurrentTime(startTime);
+                                if (audioRef.current) audioRef.current.currentTime = startTime;
+                                playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, startTime);
+                              }}
+                              className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] rounded-full text-xs font-bold transition-colors"
+                            >
+                              ▶ Resume Syncing From Here
+                            </button>
+                          )}
                         </div>
                       );
                    })}
