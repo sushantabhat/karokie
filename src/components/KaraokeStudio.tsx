@@ -190,6 +190,8 @@ export default function KaraokeStudio() {
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement>(null);
   const punchInTimeRef = useRef<number>(0);
+  const previewStartTimeRef = useRef<number>(0);
+  const previewStartOffsetRef = useRef<number>(0);
 
   const [mixSettings, setMixSettings] = useState<MixSettings>({
     trackVolume: 80,
@@ -411,11 +413,13 @@ export default function KaraokeStudio() {
       }, 100);
     } else if (isPlaying) {
       interval = setInterval(() => {
-        setCurrentTime(prev => {
-          const nextTime = prev + 0.1;
-          
-          // Auto-stop when reviewing synced lyrics in SYNC tab
-          setLyrics(currentLyrics => {
+        const elapsed = (performance.now() - previewStartTimeRef.current) / 1000;
+        const nextTime = previewStartOffsetRef.current + elapsed;
+        
+        setCurrentTime(nextTime);
+        
+        // Auto-stop when reviewing synced lyrics in SYNC tab
+        setLyrics(currentLyrics => {
             if (activeTab === "SYNC" && !isSyncSessionActive && currentLyrics.length > 0) {
               let lastSyncedLyric = null;
               for (let i = currentLyrics.length - 1; i >= 0; i--) {
@@ -437,9 +441,6 @@ export default function KaraokeStudio() {
             }
             return currentLyrics;
           });
-          
-          return nextTime;
-        });
       }, 100);
     }
     return () => clearInterval(interval);
@@ -547,17 +548,22 @@ export default function KaraokeStudio() {
     setCurrentTime(time);
   };
 
+  const startPlayback = (timeOffset: number) => {
+    previewStartTimeRef.current = performance.now();
+    previewStartOffsetRef.current = timeOffset;
+    playPreview({
+      ...mixSettings,
+      trackVolume: effectiveTrackVolume,
+      vocalVolume: effectiveVocalVolume
+    }, timeOffset);
+  };
+
   const handleSeekEnd = (time: number) => {
     if (isRecording) return;
     setCurrentTime(time);
     
     if (wasPlayingBeforeDrag.current) {
-      // Restart playback from new time
-      playPreview({
-        ...mixSettings,
-        trackVolume: effectiveTrackVolume,
-        vocalVolume: effectiveVocalVolume
-      }, time);
+      startPlayback(time);
     }
   };
 
@@ -565,11 +571,7 @@ export default function KaraokeStudio() {
     if (isPlaying) {
       stopPreview();
     } else {
-      playPreview({
-        ...mixSettings,
-        trackVolume: effectiveTrackVolume,
-        vocalVolume: effectiveVocalVolume
-      }, currentTime); // Pass currentTime so it plays from where playhead is!
+      startPlayback(currentTime);
     }
   };
 
@@ -1123,10 +1125,10 @@ export default function KaraokeStudio() {
                             if (audioRef.current) audioRef.current.currentTime = 0;
                             setCurrentTime(0);
                             setActiveLineIndex(0);
-                            playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, 0);
+                            startPlayback(0);
                           } else if (!isPlaying && currentTime > 0) {
                             setIsSyncSessionActive(true);
-                            playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, currentTime);
+                            startPlayback(currentTime);
                           }
                         }}
                         disabled={!trackUrl || (!isPlaying && currentTime > 0 && !isSyncSessionActive && !hasSyncedLines) || (!isSyncSessionActive && hasSyncedLines && currentTime === 0)}
@@ -1148,19 +1150,14 @@ export default function KaraokeStudio() {
                         </button>
                       )}
 
-                      {!isSyncSessionActive && (
-                        <button 
-                          onClick={(e) => {
-                            e.currentTarget.blur();
+                      {!isSyncSessionActive && hasSyncedLines && (
+                        <button
+                          onClick={() => {
                             if (audioRef.current) audioRef.current.currentTime = 0;
                             setCurrentTime(0);
                             setActiveLineIndex(0);
                             setIsSyncSessionActive(false);
-                            playPreview({
-                              ...mixSettings,
-                              trackVolume: effectiveTrackVolume,
-                              vocalVolume: effectiveVocalVolume
-                            }, 0);
+                            startPlayback(0);
                           }}
                           disabled={!hasSyncedLines}
                           className="flex items-center gap-2 px-6 py-3 bg-[#38bdf8]/10 hover:bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/30 rounded-full font-bold text-sm transition-colors disabled:opacity-50"
