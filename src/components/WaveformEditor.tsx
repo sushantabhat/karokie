@@ -195,11 +195,11 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
       } else {
         const contentEl = document.createElement('div');
         contentEl.title = "Double-click to unsync (return to Waiting Box)";
-        contentEl.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: flex-start; padding: 0 4px; box-sizing: border-box; overflow: hidden; pointer-events: none; border-left: 2px solid rgba(255,255,255,0.4); border-right: 2px solid rgba(255,255,255,0.4);'; 
+        contentEl.style.cssText = 'position: absolute; top: 0; left: 0; right: 0; bottom: 0; display: flex; align-items: center; justify-content: flex-start; padding: 0 4px; box-sizing: border-box; overflow: hidden; pointer-events: none; border-left: 2px solid rgba(255,255,255,0.4); border-right: 2px solid rgba(255,255,255,0.4);'; 
         
         const numSpan = document.createElement('span');
         numSpan.innerText = `${i + 1}.`;
-        numSpan.style.cssText = 'color: rgba(255,255,255,0.5); font-size: 11px; font-weight: bold; font-family: monospace; margin-right: 4px; flex-shrink: 0; pointer-events: none;';
+        numSpan.style.cssText = 'color: rgba(255,255,255,0.7); font-size: 11px; font-weight: bold; font-family: monospace; margin-right: 4px; flex-shrink: 0; pointer-events: none; text-shadow: 0 1px 2px rgba(0,0,0,0.8);';
         
         const textSpan = document.createElement('span');
         textSpan.innerText = line.text;
@@ -209,7 +209,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         contentEl.appendChild(textSpan);
 
         // Alternate region background colors to clearly separate them
-        const regionColor = i % 2 === 0 ? 'rgba(56, 189, 248, 0.15)' : 'rgba(168, 85, 247, 0.15)'; // Sky blue vs Purple
+        const regionColor = i % 2 === 0 ? 'rgba(56, 189, 248, 0.25)' : 'rgba(168, 85, 247, 0.25)'; // Sky blue vs Purple
 
         regions.current!.addRegion({
           start: wStart,
