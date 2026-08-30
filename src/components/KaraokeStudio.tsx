@@ -1447,33 +1447,24 @@ export default function KaraokeStudio() {
                 >
                   {mixSettings.countInEnabled ? "Enabled" : "Disabled"}
                 </button>
-                <input 
-                  type="number" min="40" max="240" 
-                  value={mixSettings.bpm || 120}
-                  onChange={(e) => updateSetting("bpm", Number(e.target.value))}
-                  className="w-16 bg-[#1f222b] border border-white/10 text-white rounded text-center text-xs font-mono h-7"
-                />
-                <span className="text-xs text-[#71717a] font-medium -ml-2">BPM</span>
+                {mixSettings.countInEnabled && (
+                  <>
+                    <input 
+                      type="number" min="40" max="240" 
+                      value={mixSettings.bpm || 120}
+                      onChange={(e) => updateSetting("bpm", Number(e.target.value))}
+                      className="w-16 bg-[#1f222b] border border-white/10 text-white rounded text-center text-xs font-mono h-7"
+                    />
+                    <span className="text-xs text-[#71717a] font-medium -ml-2">BPM</span>
+                  </>
+                )}
               </div>
               <span className="text-xs font-medium text-[#71717a] mt-3 block">
-                Nudge timing backward or forward if your Bluetooth microphone is out of sync.
+                Plays a 4-beat click before recording starts so you can catch the beat.
               </span>
-              <div className="flex items-center gap-4 mt-6">
-                <span className="text-sm font-medium text-[#a1a1aa] w-24">Count-in (4 beats)</span>
-                <button 
-                  onClick={() => updateSetting("countInEnabled", !mixSettings.countInEnabled)}
-                  className={`px-3 py-1 text-xs font-bold rounded-full border transition-all ${mixSettings.countInEnabled ? "bg-[#10b981]/20 border-[#10b981] text-[#10b981]" : "border-white/10 text-[#a1a1aa] hover:text-white"}`}
-                >
-                  {mixSettings.countInEnabled ? "Enabled" : "Disabled"}
-                </button>
-                <input 
-                  type="number" min="40" max="240" 
-                  value={mixSettings.bpm || 120}
-                  onChange={(e) => updateSetting("bpm", Number(e.target.value))}
-                  className="w-16 bg-[#1f222b] border border-white/10 text-white rounded text-center text-xs font-mono h-7"
-                />
-                <span className="text-xs text-[#71717a] font-medium -ml-2">BPM</span>
-              </div>
+              <span className="text-xs font-medium text-[#71717a] mt-1 block">
+                Nudge timing backward or forward if your Bluetooth mic or headphones have delay.
+              </span>
 
             </div>
             
