@@ -681,7 +681,7 @@ export default function KaraokeStudio() {
         const a = document.createElement('a');
         a.style.display = 'none';
         a.href = url;
-        a.download = 'karaoke_mix.wav';
+        a.download = 'karaoke_mix.mp3';
         document.body.appendChild(a);
         a.click();
         window.URL.revokeObjectURL(url);

@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useRef, useCallback, useEffect } from 'react';
-import { audioBufferToWav } from '@/utils/audioBufferToWav';
+import { audioBufferToMp3 } from '@/utils/audioBufferToMp3';
 
 export interface MixSettings {
   trackVolume: number;
@@ -316,7 +316,7 @@ export function useAudioMixer() {
       }
 
       const renderedBuffer = await offlineCtx.startRendering();
-      const wavBlob = audioBufferToWav(renderedBuffer);
+      const wavBlob = audioBufferToMp3(renderedBuffer);
       return wavBlob;
     } catch (err) {
       console.error('Export failed', err);
