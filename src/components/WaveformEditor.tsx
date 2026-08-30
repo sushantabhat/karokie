@@ -44,7 +44,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
   const currentIndex = React.useMemo(() => {
     let idx = -1;
     for (let i = 0; i < lyrics.length; i++) {
-      if (lyrics[i].start !== null && currentTime >= lyrics[i].start) {
+      if (lyrics[i].start !== null && currentTime >= lyrics[i].start!) {
         idx = i;
       }
     }

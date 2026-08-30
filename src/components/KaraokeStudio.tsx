@@ -12,16 +12,19 @@ import { useAudioMixer, MixSettings } from '@/hooks/useAudioMixer';
 import { saveTrackToDB, getTrackFromDB, saveVocalToDB, getVocalFromDB } from '@/utils/indexedDB';
 import { audioBufferToWav } from '@/utils/audioBufferToWav';
 
-function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeekStart, onSeekDrag, onSeekEnd, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string | string[], duration: number, currentTime: number, totalDuration?: number, onSeekStart?: (time: number) => void, onSeekDrag?: (time: number) => void, onSeekEnd?: (time: number) => void, emptyText?: string }) {
-  const canvasRef = useRef<HTMLCanvasElement>(null);
+type DialogOption = { label: string; value: string; style?: "primary" | "danger" | "secondary" };
+
 type DialogState = {
   title: string;
   message?: string;
   type: "confirm" | "prompt" | "options";
-  options?: { label: string, value: string, style?: "primary" | "danger" | "secondary" }[];
+  options?: DialogOption[];
   defaultValue?: string;
   resolve: (value: any) => void;
 };
+
+function StaticWaveform({ buffer, color, duration, currentTime, totalDuration, onSeekStart, onSeekDrag, onSeekEnd, emptyText = "No Audio Data" }: { buffer: AudioBuffer | null, color: string | string[], duration: number, currentTime: number, totalDuration?: number, onSeekStart?: (time: number) => void, onSeekDrag?: (time: number) => void, onSeekEnd?: (time: number) => void, emptyText?: string }) {
+  const canvasRef = useRef<HTMLCanvasElement>(null);
 
   const containerRef = useRef<HTMLDivElement>(null);
   const isDragging = useRef(false);
@@ -945,7 +948,7 @@ export default function KaraokeStudio() {
 
             {dialog.type === "options" && dialog.options && (
               <div className="flex flex-col gap-3">
-                {dialog.options.map((opt) => (
+                {dialog.options.map((opt: DialogOption) => (
                   <button key={opt.value} onClick={() => { dialog.resolve(opt.value); setDialog(null); }}
                     className={`w-full py-3 px-4 rounded-xl font-medium transition-colors text-left ${
                       opt.style === 'danger' ? 'bg-[#ef4444]/20 hover:bg-[#ef4444]/30 text-[#ef4444]' :
