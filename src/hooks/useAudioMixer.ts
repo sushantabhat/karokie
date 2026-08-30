@@ -158,6 +158,16 @@ export function useAudioMixer() {
     setTrackBuffer(null);
   }, []);
 
+  // Playback position tracking (for accurate UI sync)
+  const playbackStartTimeRef = useRef<number>(0);
+  const playbackStartOffsetRef = useRef<number>(0);
+
+  const getPlaybackPosition = useCallback(() => {
+    if (!audioContextRef.current) return -1;
+    const elapsed = audioContextRef.current.currentTime - playbackStartTimeRef.current;
+    return playbackStartOffsetRef.current + Math.max(0, elapsed);
+  }, []);
+
   const playPreview = useCallback((settings: MixSettings, startOffset: number = 0) => {
     if (!audioContextRef.current || !trackBufferRef.current) return;
     
@@ -209,7 +219,11 @@ export function useAudioMixer() {
 
     // Sync with latency offset (offset is in ms, we need seconds)
     const offsetSeconds = settings.latencyOffsetMs / 1000;
-    const startTime = ctx.currentTime + 0.1;
+    const startTime = ctx.currentTime;
+    
+    // Record playback position for accurate UI tracking
+    playbackStartTimeRef.current = startTime;
+    playbackStartOffsetRef.current = startOffset;
     
     // Calculate start time in the buffer based on the requested seek offset
     const trackStartOffset = startOffset;
@@ -349,6 +363,7 @@ export function useAudioMixer() {
     playPreview,
     stopPreview,
     exportMix,
+    getPlaybackPosition,
     isPlaying,
     isProcessing,
     setTrackVolumeLive,

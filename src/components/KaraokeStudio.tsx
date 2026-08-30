@@ -227,7 +227,7 @@ export default function KaraokeStudio() {
   const { 
     loadTrack, loadVocal, mergeVocal, clearVocal, clearTrack, playPreview, stopPreview, exportMix,
     isPlaying, isProcessing, setTrackVolumeLive, setVocalVolumeLive,
-    trackBuffer, vocalBuffer 
+    trackBuffer, vocalBuffer, getPlaybackPosition 
   } = useAudioMixer();
 
   type Tab = "MIXER" | "SYNC" | "EDIT";
@@ -492,8 +492,8 @@ export default function KaraokeStudio() {
       }, 100);
     } else if (isPlaying) {
       interval = setInterval(() => {
-        const elapsed = (performance.now() - previewStartTimeRef.current) / 1000;
-        const nextTime = previewStartOffsetRef.current + elapsed;
+        const nextTime = getPlaybackPosition();
+        if (nextTime < 0) return;
         
         setCurrentTime(nextTime);
         
@@ -523,7 +523,7 @@ export default function KaraokeStudio() {
       }, 100);
     }
     return () => clearInterval(interval);
-  }, [isRecording, isRecPaused, isPlaying, isSyncSessionActive, activeTab, stopPreview]); 
+  }, [isRecording, isRecPaused, isPlaying, isSyncSessionActive, activeTab, stopPreview, getPlaybackPosition]); 
 
   // Visualizer loop
   useEffect(() => {
@@ -1636,12 +1636,16 @@ export default function KaraokeStudio() {
                      </div>
                    ) : (
                      lyrics.map((line, idx) => {
-                      const isSynced = line.start !== null;
-                      const currentlyPlayingIdx = lyrics.findIndex(l => 
-                        l.start !== null && currentTime >= l.start && (l.end === null || currentTime < l.end)
-                      );
-                      const glowIndex = isSyncSessionActive ? activeLineIndex : (currentlyPlayingIdx !== -1 ? currentlyPlayingIdx : activeLineIndex);
-                      const isTarget = glowIndex === idx;
+                       const isSynced = line.start !== null;
+                       const currentlyPlayingIdx = lyrics.findIndex(l => 
+                         l.start !== null && currentTime >= l.start && (l.end === null || currentTime < l.end)
+                       );
+                       // During an active sync session, the current line is the one whose start was
+                       // just tapped (activeLineIndex - 1). Before the first tap nothing is current.
+                       // During review, only highlight the line that is actually playing; if the
+                       // audio hasn't reached any recorded line yet, don't highlight anything.
+                       const glowIndex = isSyncSessionActive ? activeLineIndex - 1 : currentlyPlayingIdx;
+                       const isTarget = glowIndex === idx;
                       
                       // During an active sync, don't auto-highlight lines we haven't reached yet, even if they have old timestamps
                       const isSung = isSynced && (currentTime >= line.start!) && (!isSyncSessionActive || idx < activeLineIndex);
@@ -1665,7 +1669,7 @@ export default function KaraokeStudio() {
                               if (line.start !== null) {
                                 setCurrentTime(line.start);
                                 if (audioRef.current) audioRef.current.currentTime = line.start;
-                                setActiveLineIndex(idx);
+                                setActiveLineIndex(idx + 1);
                                 if (isPlaying || isSyncSessionActive) {
                                   startPlayback(line.start);
                                 }
