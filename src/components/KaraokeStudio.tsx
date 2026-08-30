@@ -715,91 +715,92 @@ export default function KaraokeStudio() {
       
       {/* HEADER */}
       <header className="h-16 shrink-0 flex items-center justify-between border-b border-[#1f222b] bg-[#16181f] px-8 shadow-sm">
+        
+        {/* LEFT SIDE: Brand & Tabs */}
         <div className="flex items-center gap-6">
           <h1 className="text-lg font-black tracking-tighter text-white flex items-center gap-2">
             <Mic2 className="w-5 h-5 text-[#38bdf8]" />
             KARAOKE STUDIO
           </h1>
           
-          <div className="h-6 w-px bg-[#1f222b] mx-2" />
+          <div className="h-6 w-px bg-[#1f222b]" />
+          
           {/* VIEW TOGGLE */}
           <div className="flex bg-[#0d0e12] p-1 rounded-md border border-[#1f222b]">
-            <button onClick={() => setActiveTab("MIXER")} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "MIXER" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎛️ Mixer</button>
-            <button onClick={() => setActiveTab("SYNC")} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "SYNC" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎮 Sync</button>
-            <button onClick={() => setActiveTab("EDIT")} className={`px-3 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "EDIT" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>✂️ Edit</button>
+            <button onClick={() => setActiveTab("MIXER")} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "MIXER" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎛️ Mixer</button>
+            <button onClick={() => setActiveTab("SYNC")} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "SYNC" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>🎮 Sync</button>
+            <button onClick={() => setActiveTab("EDIT")} className={`px-4 py-1.5 rounded text-xs font-bold transition-all ${activeTab === "EDIT" ? "bg-[#38bdf8] text-gray-900 shadow-sm" : "text-[#71717a] hover:text-[#fafafa]"}`}>✂️ Edit</button>
           </div>
-          <div className="h-6 w-px bg-[#1f222b] mx-2" />
+        </div>
 
-
-          {/* Unified Transport Controls */}
-          <div className="flex items-center gap-3">
-            {/* Master Play Button */}
+        {/* RIGHT SIDE: Transport & Actions */}
+        <div className="flex items-center gap-6">
+          {/* Transport Controls */}
+          <div className="flex items-center gap-3 bg-[#0d0e12] p-1.5 rounded-full border border-[#1f222b]">
             <button 
               onClick={handlePlayPauseClick} 
               disabled={isRecording || !trackBuffer}
-              className={`w-12 h-12 rounded-full border-2 flex items-center justify-center transition-all ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                 (isPlaying)
-                  ? 'bg-[#10b981] border-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'
-                  : 'bg-[#0d0e12] border-[#10b981] text-[#10b981] hover:bg-[#10b981] hover:text-white disabled:opacity-50 disabled:pointer-events-none'
+                  ? 'bg-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                  : 'bg-[#1f222b] text-[#10b981] hover:bg-[#10b981] hover:text-white disabled:opacity-50 disabled:pointer-events-none'
               }`}
               title="Play/Pause"
             >
-              {(isPlaying) ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-1" />}
+              {(isPlaying) ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-1" />}
             </button>
 
-            {/* Record Button */}
             <button 
               onClick={handleStartRecording}
               disabled={isRecording || isPlaying || !trackFile || activeTab === "SYNC"}
-              className={`w-12 h-12 rounded-full flex items-center justify-center transition-all ${
+              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
                 isRecording 
-                  ? 'bg-transparent border-2 border-[#ef4444] shadow-[0_0_20px_rgba(239,68,68,0.7)] animate-pulse' 
-                  : 'bg-[#0d0e12] border-2 border-[#ef4444] hover:bg-[#ef4444]/10 disabled:opacity-50 disabled:pointer-events-none'
+                  ? 'bg-transparent border-2 border-[#ef4444] shadow-[0_0_15px_rgba(239,68,68,0.7)] animate-pulse' 
+                  : 'bg-[#1f222b] text-[#ef4444] hover:bg-[#ef4444]/20 disabled:opacity-50 disabled:pointer-events-none'
               }`}
               title="Record"
             >
-              <div className={`rounded-full transition-all ${isRecording ? 'w-4 h-4 bg-[#ef4444]' : 'w-4 h-4 bg-[#ef4444]'}`} />
+              <div className={`rounded-full transition-all ${isRecording ? 'w-3 h-3 bg-[#ef4444]' : 'w-3 h-3 bg-[#ef4444]'}`} />
             </button>
 
-            {/* Stop Button */}
             <button 
               onClick={handleStopClick}
               disabled={!isRecording && !isPlaying && currentTime === 0}
-              className="w-10 h-10 ml-2 rounded bg-[#0d0e12] border border-[#3f3f46] text-[#a1a1aa] hover:bg-[#3f3f46] hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none"
+              className="w-10 h-10 rounded-full bg-[#1f222b] text-[#a1a1aa] hover:bg-[#3f3f46] hover:text-white flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none"
               title="Stop"
             >
-              <Square className="w-4 h-4 fill-current" />
+              <Square className="w-3 h-3 fill-current" />
             </button>
-            {/* Hidden file inputs */}
-            <input
-              type="file"
-              accept="audio/*"
-              className="hidden"
-              id="file-upload"
-              onChange={handleTrackUpload}
-            />
-            <input
-              type="file"
-              accept=".lrc"
-              className="hidden"
-              id="lrc-upload"
-              onChange={handleLRCUpload}
-            />
-            {/* Action Buttons */}
+          </div>
+
+          <div className="h-6 w-px bg-[#1f222b]" />
+
+          {/* Action Buttons based on Tab */}
+          <div className="flex items-center gap-3">
             {activeTab === "MIXER" && (
-              <button
-                onClick={() => document.getElementById('file-upload')?.click()}
-                className="px-5 py-2.5 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none"
-                title="Upload Instrumental"
-              >
-                📤 Upload Track
-              </button>
+              <>
+                <button
+                  onClick={() => document.getElementById('file-upload')?.click()}
+                  className="px-4 py-2 bg-[#1f222b] hover:bg-[#38bdf8] hover:text-gray-900 text-[#a1a1aa] rounded-md text-xs font-bold tracking-wide transition-all disabled:opacity-50 disabled:pointer-events-none"
+                  title="Upload Instrumental"
+                >
+                  📤 Upload Track
+                </button>
+                <button
+                  onClick={handleExportClick}
+                  disabled={isProcessing || !recordedBlob}
+                  className="px-4 py-2 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_10px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
+                >
+                  {isProcessing ? 'PROCESSING...' : '⬇️ Download Mixed Song'}
+                </button>
+              </>
             )}
+            
             {(activeTab === "SYNC" || activeTab === "EDIT") && (
               <>
                 <button
                   onClick={() => document.getElementById('lrc-upload')?.click()}
-                  className="px-5 py-2.5 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none"
+                  className="px-4 py-2 bg-[#1f222b] hover:bg-[#38bdf8] hover:text-gray-900 text-[#a1a1aa] rounded-md text-xs font-bold tracking-wide transition-all disabled:opacity-50 disabled:pointer-events-none"
                   title="Upload LRC"
                 >
                   📄 Upload .LRC
@@ -807,23 +808,18 @@ export default function KaraokeStudio() {
                 <button
                   onClick={handleExportLRC}
                   disabled={lyrics.length === 0 || !trackFile}
-                  className="px-5 py-2.5 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
+                  className="px-4 py-2 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_10px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
                 >
                   ⬇️ Download .LRC
                 </button>
               </>
             )}
-{activeTab === "MIXER" && (
-  <button
-    onClick={handleExportClick}
-    disabled={isProcessing || !recordedBlob}
-    className="px-5 py-2.5 bg-[#38bdf8] hover:bg-[#0ea5e9] text-gray-900 rounded-md text-xs font-bold tracking-wide transition-all shadow-[0_0_15px_rgba(56,189,248,0.3)] disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
-  >
-    {isProcessing ? 'PROCESSING...' : '⬇️ Download Mixed Song'}
-  </button>
-)}
           </div>
         </div>
+
+        {/* Hidden file inputs */}
+        <input type="file" accept="audio/*" className="hidden" id="file-upload" onChange={handleTrackUpload} />
+        <input type="file" accept=".lrc" className="hidden" id="lrc-upload" onChange={handleLRCUpload} />
       </header>
 
       {/* TIMELINE AREA */}
@@ -1112,14 +1108,37 @@ export default function KaraokeStudio() {
               </div>
             ) : activeTab === "SYNC" ? (
               <div className="flex-1 flex flex-col h-full gap-4 min-h-0">
-                <div className="flex flex-col items-center justify-center py-4 gap-4">
-                  <div className="flex items-center justify-center w-full max-w-4xl px-4">
-                    <div className="flex gap-4">
+                <div className="flex flex-col items-center justify-center py-4 border-b border-[#1f222b] bg-[#1a1d24]">
+                  <div className="flex items-center justify-between w-full max-w-5xl px-4">
+                    {/* Left: Secondary Actions (Review) */}
+                    <div className="flex items-center gap-3 w-1/3 justify-start">
+                      {!isSyncSessionActive && hasSyncedLines && !isPlaying && (
+                        <button
+                          onClick={() => {
+                            if (audioRef.current) audioRef.current.currentTime = 0;
+                            setCurrentTime(0);
+                            setActiveLineIndex(0);
+                            setIsSyncSessionActive(false);
+                            startPlayback(0);
+                          }}
+                          disabled={!hasSyncedLines}
+                          className="flex items-center gap-2 px-5 py-2.5 bg-[#38bdf8]/10 hover:bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/30 rounded-full font-bold text-sm transition-colors disabled:opacity-50"
+                        >
+                          👀 Review Sync
+                        </button>
+                      )}
+                    </div>
+
+                    {/* Center: Primary Sync Actions */}
+                    <div className="flex items-center justify-center gap-3 w-1/3">
                       <button 
                         onClick={(e) => { 
                           e.currentTarget.blur(); 
                           if (isPlaying && isSyncSessionActive) {
                             triggerSyncTap();
+                          } else if (isPlaying && !isSyncSessionActive) {
+                            // Active Review Sync -> Stop it
+                            stopPreview();
                           } else if (!isPlaying && currentTime === 0) {
                             setIsSyncSessionActive(true);
                             if (audioRef.current) audioRef.current.currentTime = 0;
@@ -1131,10 +1150,10 @@ export default function KaraokeStudio() {
                             startPlayback(currentTime);
                           }
                         }}
-                        disabled={!trackUrl || (!isPlaying && currentTime > 0 && !isSyncSessionActive && !hasSyncedLines) || (!isSyncSessionActive && hasSyncedLines && currentTime === 0)}
-                        className={`flex items-center gap-2 px-6 py-3 rounded-full font-black text-sm transition-transform hover:scale-105 ${isPlaying && isSyncSessionActive ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : 'bg-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'} disabled:opacity-50`}
+                        disabled={!trackUrl || (!isPlaying && currentTime > 0 && !isSyncSessionActive && !hasSyncedLines) || (!isSyncSessionActive && hasSyncedLines && currentTime === 0 && !isPlaying)}
+                        className={`flex items-center gap-2 px-6 py-3 rounded-full font-black text-sm transition-transform hover:scale-105 ${isPlaying && isSyncSessionActive ? 'bg-[#ef4444] text-white shadow-[0_0_15px_rgba(239,68,68,0.4)]' : isPlaying && !isSyncSessionActive ? 'bg-[#f59e0b] text-white shadow-[0_0_15px_rgba(245,158,11,0.4)]' : 'bg-[#10b981] text-white shadow-[0_0_15px_rgba(16,185,129,0.4)]'} disabled:opacity-50`}
                       >
-                        {isPlaying && isSyncSessionActive ? 'Tap to Sync Line (Spacebar)' : (!isPlaying && currentTime > 0 ? '▶ Resume Syncing' : '▶ START SYNCING')}
+                        {isPlaying && isSyncSessionActive ? 'Tap to Sync Line (Spacebar)' : isPlaying && !isSyncSessionActive ? '⏸ Stop Review' : (!isPlaying && currentTime > 0 ? '▶ Resume Syncing' : '▶ START SYNCING')}
                       </button>
 
                       {isSyncSessionActive && (
@@ -1144,70 +1163,65 @@ export default function KaraokeStudio() {
                             if (isPlaying) stopPreview();
                             setIsSyncSessionActive(false);
                           }}
-                          className="flex items-center gap-2 px-6 py-3 bg-green-500/10 hover:bg-green-500/20 text-green-500 border border-green-500/30 rounded-full font-bold text-sm transition-colors"
+                          className="flex items-center gap-2 px-5 py-2.5 bg-[#10b981]/10 hover:bg-[#10b981]/20 text-[#10b981] border border-[#10b981]/30 rounded-full font-bold text-sm transition-colors"
                         >
-                          ✓ FINISH / SAVE
+                          ✓ FINISH
                         </button>
                       )}
+                    </div>
 
-                      {!isSyncSessionActive && hasSyncedLines && (
-                        <button
-                          onClick={() => {
-                            if (audioRef.current) audioRef.current.currentTime = 0;
-                            setCurrentTime(0);
-                            setActiveLineIndex(0);
-                            setIsSyncSessionActive(false);
-                            startPlayback(0);
-                          }}
-                          disabled={!hasSyncedLines}
-                          className="flex items-center gap-2 px-6 py-3 bg-[#38bdf8]/10 hover:bg-[#38bdf8]/20 text-[#38bdf8] border border-[#38bdf8]/30 rounded-full font-bold text-sm transition-colors disabled:opacity-50"
-                        >
-                          👀 Review Sync
-                        </button>
-                      )}
+                    {/* Right: Danger Actions (Clear/Restart) */}
+                    <div className="flex items-center gap-3 w-1/3 justify-end">
+                      <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          e.currentTarget.blur();
+                          if (isPlaying) stopPreview();
+                          if (audioRef.current) {
+                            audioRef.current.pause();
+                            audioRef.current.currentTime = 0;
+                          }
+                          setCurrentTime(0);
+                          setActiveLineIndex(0);
+                          setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null })));
+                          setIsSyncSessionActive(false);
+                        }}
+                        disabled={!hasSyncedLines && currentTime === 0}
+                        className="px-4 py-2 bg-orange-500/10 text-orange-500 text-xs font-bold rounded-full hover:bg-orange-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed border border-orange-500/20"
+                      >
+                        🔄 Restart Sync
+                      </button>
+                      <button onClick={(e) => { 
+                        e.stopPropagation(); 
+                        if (window.confirm("Wipe all sync timings? This cannot be undone.")) {
+                          if (isPlaying) stopPreview();
+                          if (audioRef.current) {
+                            audioRef.current.pause();
+                            audioRef.current.currentTime = 0;
+                          }
+                          setCurrentTime(0);
+                          setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null }))); 
+                          setActiveLineIndex(0); 
+                          setIsSpacebarDown(false); 
+                          setIsSyncSessionActive(false);
+                        }
+                      }} className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold rounded-full transition-colors border border-red-500/20">
+                        Clear All
+                      </button>
                     </div>
                   </div>
                 </div>
                 <div 
                   className={`flex-1 overflow-y-auto custom-scrollbar bg-[#16181f] rounded border border-[#1f222b] p-8 flex flex-col items-center relative transition-colors select-none ${isSpacebarDown ? 'border-[#38bdf8] bg-[#38bdf8]/10' : ''}`}
                 >
-                   <div className="absolute top-4 right-4 flex gap-2 z-10">
-                     <button 
-                       onClick={(e) => {
-                         e.stopPropagation();
-                         e.currentTarget.blur();
-                         if (isPlaying) stopPreview();
-                         if (audioRef.current) {
-                           audioRef.current.pause();
-                           audioRef.current.currentTime = 0;
-                         }
-                         setCurrentTime(0);
-                         setActiveLineIndex(0);
-                         setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null })));
-                         setIsSyncSessionActive(false);
-                       }}
-                       disabled={!hasSyncedLines && currentTime === 0}
-                       className="px-3 py-1 bg-orange-500/10 text-orange-500 text-xs font-bold rounded hover:bg-orange-500/20 transition-colors disabled:opacity-30 disabled:cursor-not-allowed"
-                     >
-                       🔄 Restart Sync
-                     </button>
-                     <button onClick={(e) => { 
-                       e.stopPropagation(); 
-                       if (window.confirm("Wipe all sync timings? This cannot be undone.")) {
-                         if (isPlaying) stopPreview();
-                         if (audioRef.current) {
-                           audioRef.current.pause();
-                           audioRef.current.currentTime = 0;
-                         }
-                         setCurrentTime(0);
-                         setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null }))); 
-                         setActiveLineIndex(0); 
-                         setIsSpacebarDown(false); 
-                         setIsSyncSessionActive(false);
-                       }
-                     }} className="px-3 py-1 bg-red-500/10 text-red-500 text-xs font-bold rounded hover:bg-red-500/20 transition-colors">Clear All</button>
-                   </div>
-                   {lyrics.map((line, idx) => {
+                   {lyrics.length === 0 ? (
+                     <div className="flex flex-col items-center justify-center h-full text-center max-w-md">
+                       <h3 className="text-xl font-bold text-white mb-2">No Lyrics Yet</h3>
+                       <p className="text-[#a1a1aa] mb-6">Upload an LRC file or type your lyrics in the Editor tab first.</p>
+                       <button onClick={() => setActiveTab("EDIT")} className="px-6 py-2 bg-[#38bdf8] text-gray-900 rounded-full font-bold shadow-[0_0_15px_rgba(56,189,248,0.3)] hover:bg-[#0ea5e9] transition-colors">Go to Editor</button>
+                     </div>
+                   ) : (
+                     lyrics.map((line, idx) => {
                       const isSynced = line.start !== null;
                       const currentlyPlayingIdx = lyrics.findIndex(l => 
                         l.start !== null && currentTime >= l.start && (l.end === null || currentTime < l.end)
@@ -1238,8 +1252,8 @@ export default function KaraokeStudio() {
                                 setCurrentTime(line.start);
                                 if (audioRef.current) audioRef.current.currentTime = line.start;
                                 setActiveLineIndex(idx);
-                                if (isSyncSessionActive && !isPlaying) {
-                                  playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, line.start);
+                                if (isPlaying || isSyncSessionActive) {
+                                  startPlayback(line.start);
                                 }
                               } else {
                                 // Clicked unsynced line
@@ -1267,7 +1281,7 @@ export default function KaraokeStudio() {
                                 const startTime = line.end || line.start || currentTime;
                                 setCurrentTime(startTime);
                                 if (audioRef.current) audioRef.current.currentTime = startTime;
-                                playPreview({ ...mixSettings, trackVolume: effectiveTrackVolume, vocalVolume: effectiveVocalVolume }, startTime);
+                                startPlayback(startTime);
                               }}
                               className="mt-4 flex items-center gap-2 px-4 py-2 bg-[#10b981]/20 hover:bg-[#10b981]/30 text-[#10b981] rounded-full text-xs font-bold transition-colors"
                             >
@@ -1276,7 +1290,7 @@ export default function KaraokeStudio() {
                           )}
                         </div>
                       );
-                   })}
+                   }))}
                 </div>
               </div>
             ) : (
