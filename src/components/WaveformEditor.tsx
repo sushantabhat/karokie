@@ -15,8 +15,11 @@ export type LineSync = {
 interface WaveformEditorProps {
   trackUrl: string;
   lyrics: LineSync[];
-  onUpdateLine: (id: string, start: number, end: number) => void;
+  onUpdateLine: (id: string, start: number | null, end: number | null) => void;
 }
+
+// Fallback for drag data across shadow boundaries
+let activeDraggedLineId: string | null = null;
 
 export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: WaveformEditorProps) {
   const containerRef = useRef<HTMLDivElement>(null);
@@ -30,6 +33,7 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
   const [hoveredInfo, setHoveredInfo] = useState<string | null>(null);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
+  const dropZoneRef = useRef<HTMLDivElement>(null);
 
   const formatTime = (time: number) => {
     const mins = Math.floor(time / 60);
@@ -190,13 +194,18 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
         }
       } else {
         const contentEl = document.createElement('div');
-        // Removed native title and reverted pointer-events to none so WaveSurfer can properly detect clicks and drags on the region!
+        contentEl.title = "Double-click to unsync (return to Waiting Box)";
         contentEl.style.cssText = 'width: 100%; height: 100%; display: flex; align-items: center; justify-content: flex-start; padding: 0 4px; box-sizing: border-box; overflow: hidden; pointer-events: none; border-left: 2px solid rgba(255,255,255,0.4); border-right: 2px solid rgba(255,255,255,0.4);'; 
+        
+        const numSpan = document.createElement('span');
+        numSpan.innerText = `${i + 1}.`;
+        numSpan.style.cssText = 'color: rgba(255,255,255,0.5); font-size: 11px; font-weight: bold; font-family: monospace; margin-right: 4px; flex-shrink: 0; pointer-events: none;';
         
         const textSpan = document.createElement('span');
         textSpan.innerText = line.text;
         textSpan.style.cssText = 'color: #fff; font-size: 14px; font-weight: bold; text-shadow: 0 1px 3px rgba(0,0,0,0.9); white-space: nowrap; text-overflow: ellipsis; overflow: hidden; max-width: 100%; pointer-events: none;';
         
+        contentEl.appendChild(numSpan);
         contentEl.appendChild(textSpan);
 
         // Alternate region background colors to clearly separate them
@@ -228,9 +237,20 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
     };
 
     regions.current.on('region-update', onRegionUpdate);
+    
+    // Double click to unsync
+    const onRegionDoubleClick = (region: any, e: MouseEvent) => {
+      e.stopPropagation(); // prevent seek
+      if (region.id.startsWith('line-')) {
+        const id = region.id.replace('line-', '');
+        onUpdateLine(id, null, null);
+      }
+    };
+    regions.current.on('region-double-clicked', onRegionDoubleClick);
 
     return () => {
       regions.current?.un('region-update', onRegionUpdate);
+      regions.current?.un('region-double-clicked', onRegionDoubleClick);
     };
   }, [isReady]); // We rely on onUpdateLine being stable or using refs if necessary
 
@@ -240,92 +260,243 @@ export default function WaveformEditor({ trackUrl, lyrics, onUpdateLine }: Wavef
   };
 
   return (
-    <div className="flex flex-col h-full border border-[#1f222b] bg-[#16181f] rounded-lg shadow-sm">
-      {errorMsg && (
-        <div className="bg-red-500/20 text-red-400 p-2 text-xs font-mono border-b border-red-500/50">
-          Error: {errorMsg}
-        </div>
-      )}
-      <div className="p-3 border-b border-[#1f222b] flex items-center justify-between shrink-0">
-        <h3 className="font-bold text-white flex items-center gap-2 text-sm">
-          <span className="text-[#38bdf8]">Global Timeline</span> (CapCut Style)
-        </h3>
-        <div className="flex items-center gap-4">
-          <div className="flex items-center gap-2 px-3 py-1 bg-[#0d0e12] rounded-full border border-[#1f222b]">
-            <span className="text-xs font-mono text-[#38bdf8]">{formatTime(currentTime)}</span>
-            <span className="text-xs font-mono text-[#71717a]">/ {formatTime(duration)}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button onClick={() => setZoom(z => Math.max(10, z - 20))} className="p-1.5 text-[#a1a1aa] hover:text-white rounded hover:bg-[#1f222b]">
-              <ZoomOut className="w-4 h-4" />
-            </button>
-            <span className="text-xs font-mono text-[#71717a] w-12 text-center">{zoom}px</span>
-            <button onClick={() => setZoom(z => Math.min(300, z + 20))} className="p-1.5 text-[#a1a1aa] hover:text-white rounded hover:bg-[#1f222b]">
-              <ZoomIn className="w-4 h-4" />
-            </button>
-          </div>
-          <div className="h-4 w-px bg-[#1f222b]" />
-          <button onClick={togglePlay} className="w-8 h-8 flex items-center justify-center bg-[#38bdf8] text-gray-900 rounded-full hover:bg-[#0ea5e9] transition-colors">
-            {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
-          </button>
-        </div>
-      </div>
+    <div className="flex h-full border border-[#1f222b] bg-[#16181f] rounded-lg shadow-sm overflow-hidden">
       
-      {/* Cinematic Scrolling Lyric Screen (Apple Music Style) */}
-      <div className="h-48 shrink-0 bg-[#09090b] border-b border-[#1f222b] overflow-hidden relative flex flex-col items-center justify-start">
-        {/* Ambient Glow */}
-        <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
-          <div className="w-[300px] h-[100px] bg-[#38bdf8] blur-[80px] rounded-full mix-blend-screen" />
+      {/* WAITING BOX (Left Sidebar) */}
+      <div className="w-64 border-r border-[#1f222b] flex flex-col bg-[#0d0e12] shrink-0">
+        <div className="p-3 border-b border-[#1f222b]">
+          <h3 className="font-bold text-sm text-white">Waiting Box</h3>
+          <p className="text-xs text-[#71717a]">Drag to timeline to sync</p>
         </div>
-
-        {/* Scroll Masks */}
-        <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#09090b] to-transparent z-10 pointer-events-none" />
-        <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#09090b] to-transparent z-10 pointer-events-none" />
-
-        {/* Rolling Lyrics Container */}
         <div 
-          className="flex flex-col items-center w-full transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
-          style={{ transform: `translateY(${-(focusIndex * 48)}px)`, marginTop: '72px' }}
+          className="flex-1 overflow-y-auto p-2 flex flex-col gap-2 custom-scrollbar"
+          onDragOver={(e) => e.preventDefault()}
+          onDrop={(e) => {
+            e.preventDefault();
+            const lineId = e.dataTransfer.getData('text/plain');
+            if (lineId) onUpdateLine(lineId, null, null);
+          }}
         >
-          {lyrics.length === 0 ? (
-            <div className="h-[48px] flex items-center justify-center w-full text-sm font-mono text-[#71717a] italic">No synced lyrics...</div>
+          {lyrics.filter(l => l.start === null).length === 0 ? (
+            <div className="text-center p-4 text-xs font-mono text-[#71717a]">All lyrics placed!</div>
           ) : (
-            lyrics.map((line, idx) => {
-              const isActive = activeLyric && activeLyric.id === line.id;
-              const isPast = idx < focusIndex;
-              
-              return (
-                <div 
-                  key={line.id}
-                  className={`h-[48px] flex flex-col items-center justify-center w-full px-8 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
-                    isActive 
-                      ? 'scale-100 opacity-100' 
-                      : isPast
-                        ? 'scale-95 opacity-40'
-                        : 'scale-95 opacity-60'
-                  }`}
-                >
-                  <span className={`truncate max-w-full text-center ${isActive ? 'text-2xl md:text-3xl font-black text-white drop-shadow-[0_0_15px_rgba(56,189,248,0.4)]' : isActive === false && isPast ? 'text-xl font-bold text-[#3f3f46]' : 'text-xl font-bold text-[#52525b]'}`}>
-                    {line.text}
-                  </span>
-                  {isActive && (
-                    <span className="text-xs font-mono text-[#38bdf8] opacity-80 mt-1 animate-in fade-in zoom-in duration-300">
-                      {line.start !== null ? line.start.toFixed(2) : '0.00'}s - {line.end !== null ? line.end.toFixed(2) : '...'}s
-                    </span>
-                  )}
-                </div>
-              );
-            })
+            lyrics.map((line, index) => ({...line, index})).filter(l => l.start === null).map(line => (
+              <div
+                key={line.id}
+                draggable={true}
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/plain', line.id);
+                  e.dataTransfer.setData('application/json', JSON.stringify({ id: line.id, text: line.text }));
+                  e.dataTransfer.effectAllowed = 'move';
+                  activeDraggedLineId = line.id;
+                  
+                  if (containerRef.current) containerRef.current.style.pointerEvents = 'none';
+                  
+                  if (dropZoneRef.current) {
+                    dropZoneRef.current.style.opacity = '1';
+                  }
+                }}
+                onDragEnd={() => {
+                  setTimeout(() => { 
+                    activeDraggedLineId = null; 
+                    if (containerRef.current) containerRef.current.style.pointerEvents = 'auto';
+                    if (dropZoneRef.current) {
+                      dropZoneRef.current.style.opacity = '0';
+                    }
+                  }, 100);
+                }}
+                className="p-3 bg-[#1f222b] border border-[#3f3f46] rounded cursor-grab hover:bg-[#272a35] active:cursor-grabbing transition-colors group flex gap-3 items-start"
+                title="Drag onto the waveform"
+              >
+                <span className="text-[11px] font-mono font-bold text-[#38bdf8] opacity-60 mt-0.5 shrink-0 w-4">{line.index + 1}.</span>
+                <span className="text-sm font-bold text-white line-clamp-2">{line.text}</span>
+              </div>
+            ))
           )}
         </div>
       </div>
 
-      <div className="flex-1 p-4 overflow-hidden flex flex-col relative">
-        {/* Waveform (Timeline will be automatically injected inside here by WaveSurfer) */}
+      {/* MAIN EDITOR AREA */}
+      <div className="flex-1 flex flex-col min-w-0">
+        {errorMsg && (
+          <div className="bg-red-500/20 text-red-400 p-2 text-xs font-mono border-b border-red-500/50 shrink-0">
+            Error: {errorMsg}
+          </div>
+        )}
+        <div className="p-3 border-b border-[#1f222b] flex items-center justify-between shrink-0">
+          <h3 className="font-bold text-white flex items-center gap-2 text-sm">
+            <span className="text-[#38bdf8]">Global Timeline</span> (CapCut Style)
+          </h3>
+          <div className="flex items-center gap-4">
+            <div className="flex items-center gap-2 px-3 py-1 bg-[#0d0e12] rounded-full border border-[#1f222b]">
+              <span className="text-xs font-mono text-[#38bdf8]">{formatTime(currentTime)}</span>
+              <span className="text-xs font-mono text-[#71717a]">/ {formatTime(duration)}</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <button onClick={() => setZoom(z => Math.max(10, z - 20))} className="p-1.5 text-[#a1a1aa] hover:text-white rounded hover:bg-[#1f222b]">
+                <ZoomOut className="w-4 h-4" />
+              </button>
+              <span className="text-xs font-mono text-[#71717a] w-12 text-center">{zoom}px</span>
+              <button onClick={() => setZoom(z => Math.min(300, z + 20))} className="p-1.5 text-[#a1a1aa] hover:text-white rounded hover:bg-[#1f222b]">
+                <ZoomIn className="w-4 h-4" />
+              </button>
+            </div>
+            <div className="h-4 w-px bg-[#1f222b]" />
+            <button onClick={togglePlay} className="w-8 h-8 flex items-center justify-center bg-[#38bdf8] text-gray-900 rounded-full hover:bg-[#0ea5e9] transition-colors">
+              {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+            </button>
+          </div>
+        </div>
+        
+        {/* Cinematic Scrolling Lyric Screen (Apple Music Style) */}
+        <div className="h-48 shrink-0 bg-[#09090b] border-b border-[#1f222b] overflow-hidden relative flex flex-col items-center justify-start">
+          {/* Ambient Glow */}
+          <div className="absolute inset-0 flex items-center justify-center opacity-20 pointer-events-none">
+            <div className="w-[300px] h-[100px] bg-[#38bdf8] blur-[80px] rounded-full mix-blend-screen" />
+          </div>
+
+          {/* Scroll Masks */}
+          <div className="absolute top-0 left-0 right-0 h-16 bg-gradient-to-b from-[#09090b] to-transparent z-10 pointer-events-none" />
+          <div className="absolute bottom-0 left-0 right-0 h-16 bg-gradient-to-t from-[#09090b] to-transparent z-10 pointer-events-none" />
+
+          {/* Rolling Lyrics Container */}
+          <div 
+            className="flex flex-col items-center w-full transition-transform duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)]"
+            style={{ transform: `translateY(${-(focusIndex * 48)}px)`, marginTop: '72px' }}
+          >
+            {lyrics.length === 0 ? (
+              <div className="h-[48px] flex items-center justify-center w-full text-sm font-mono text-[#71717a] italic">No synced lyrics...</div>
+            ) : (
+              lyrics.map((line, idx) => {
+                const isActive = activeLyric && activeLyric.id === line.id;
+                const isPast = idx < focusIndex;
+                
+                return (
+                  <div 
+                    key={line.id}
+                    className={`h-[48px] flex flex-col items-center justify-center w-full px-8 transition-all duration-700 ease-[cubic-bezier(0.2,0.8,0.2,1)] ${
+                      isActive 
+                        ? 'scale-100 opacity-100' 
+                        : isPast
+                          ? 'scale-95 opacity-40'
+                          : 'scale-95 opacity-60'
+                    }`}
+                  >
+                    <div className="flex items-center gap-3 max-w-full justify-center">
+                      <span className={`font-mono shrink-0 ${isActive ? 'text-xl text-[#38bdf8] opacity-50' : 'text-sm text-[#71717a] opacity-30'}`}>{idx + 1}.</span>
+                      <span className={`truncate text-center ${isActive ? 'text-2xl md:text-3xl font-black text-white drop-shadow-[0_0_15px_rgba(56,189,248,0.4)]' : isActive === false && isPast ? 'text-xl font-bold text-[#3f3f46]' : 'text-xl font-bold text-[#52525b]'}`}>
+                        {line.text}
+                      </span>
+                    </div>
+                    {isActive && (
+                      <span className="text-xs font-mono text-[#38bdf8] opacity-80 mt-1 animate-in fade-in zoom-in duration-300">
+                        {line.start !== null ? line.start.toFixed(2) : '0.00'}s - {line.end !== null ? line.end.toFixed(2) : '...'}s
+                      </span>
+                    )}
+                  </div>
+                );
+              })
+            )}
+          </div>
+        </div>
+
         <div 
-          ref={containerRef} 
-          className="waveform-container w-full flex-1 rounded bg-[#0d0e12] border border-[#1f222b] custom-scrollbar overflow-y-auto"
-        />
+          className="flex-1 p-4 overflow-hidden flex flex-col relative"
+          onDragEnter={(e) => { e.preventDefault(); }}
+          onDragOver={(e) => {
+            e.preventDefault();
+            e.dataTransfer.dropEffect = 'move';
+            
+            // Move shadow projectile
+            if (dropZoneRef.current && containerRef.current) {
+              const waveRect = containerRef.current.getBoundingClientRect();
+              const dropX = Math.max(0, Math.min(e.clientX - waveRect.left, waveRect.width));
+              const cursor = dropZoneRef.current.querySelector('.drop-cursor') as HTMLDivElement;
+              if (cursor) {
+                cursor.style.transform = `translateX(${dropX}px)`;
+              }
+            }
+          }}
+          onDrop={(e) => {
+            e.preventDefault();
+            if (containerRef.current) containerRef.current.style.pointerEvents = 'auto';
+            if (dropZoneRef.current) {
+              dropZoneRef.current.style.opacity = '0';
+            }
+            
+            let lineId = activeDraggedLineId;
+            try {
+              const payload = e.dataTransfer.getData('application/json');
+              if (payload) {
+                const data = JSON.parse(payload);
+                if (data && data.id) lineId = data.id;
+              }
+            } catch (err) {}
+            
+            if (!lineId && e.dataTransfer) {
+              lineId = e.dataTransfer.getData('text/plain') || lineId;
+            }
+
+            if (!lineId) return;
+
+            if (!containerRef.current) return;
+            const waveRect = containerRef.current.getBoundingClientRect();
+            // Accuracy fix: use the waveform's rect, not the padded wrapper
+            const dropX = Math.max(0, e.clientX - waveRect.left);
+            
+            let scrollLeft = 0;
+            let scrollWidth = waveRect.width || 1;
+            
+            try {
+              const ws = wavesurfer.current;
+              if (ws) {
+                const wrapper = ws.getWrapper();
+                const scrollEl = wrapper.shadowRoot ? (wrapper.shadowRoot.querySelector('.scroll') || wrapper) : wrapper;
+                scrollLeft = scrollEl.scrollLeft || 0;
+                scrollWidth = Math.max(scrollEl.scrollWidth, waveRect.width, 1);
+              }
+            } catch (err) {
+              console.warn('Could not read wavesurfer scroll data', err);
+            }
+
+            const totalDur = wavesurfer.current?.getDuration() || duration || 0;
+            if (totalDur === 0) return;
+
+            let startTime = ((dropX + scrollLeft) / scrollWidth) * totalDur;
+            
+            if (isNaN(startTime) || !isFinite(startTime)) {
+              startTime = (dropX / (waveRect.width || 1)) * totalDur;
+            }
+            
+            startTime = Math.max(0, Math.min(startTime, totalDur - 0.5));
+            onUpdateLine(lineId, startTime, startTime + 2.0);
+          }}
+        >
+          <div 
+            ref={dropZoneRef}
+            className="absolute inset-4 z-50 bg-sky-500/10 border-2 border-dashed border-[#38bdf8] rounded backdrop-blur-[1px] pointer-events-none transition-opacity duration-200 overflow-hidden"
+            style={{ opacity: 0 }}
+          >
+            <div className="flex items-center justify-center w-full h-full">
+              <span className="text-[#38bdf8] font-bold text-lg drop-shadow-md bg-black/40 px-4 py-2 rounded-full">Drop here to sync</span>
+            </div>
+            
+            {/* Shadow Projectile */}
+            <div 
+              className="drop-cursor absolute top-0 bottom-0 w-[2px] bg-white shadow-[0_0_12px_#38bdf8] z-10 origin-top"
+              style={{ left: 0 }}
+            >
+              <div className="absolute top-0 left-0 px-2 py-1 bg-[#38bdf8] text-gray-900 text-[10px] font-bold rounded-b whitespace-nowrap -translate-x-1/2">
+                Drop Time
+              </div>
+            </div>
+          </div>
+          
+          <div 
+            ref={containerRef} 
+            className="waveform-container w-full flex-1 rounded bg-[#0d0e12] border border-[#1f222b] custom-scrollbar overflow-y-auto"
+          />
+        </div>
       </div>
     </div>
   );

@@ -611,57 +611,74 @@ export default function KaraokeStudio() {
     }
   };
 
-  const handleLineUpdate = (id: string, newStart: number, newEnd: number) => {
+  const handleLineUpdate = (id: string, newStart: number | null, newEnd: number | null) => {
     setLyrics(prev => {
       const next = [...prev];
       const idx = next.findIndex(l => l.id === id);
       if (idx === -1) return prev;
 
+      if (newStart === null || newEnd === null) {
+        next[idx] = { ...next[idx], start: null, end: null };
+        return next;
+      }
+
       let adjustedStart = newStart;
       let adjustedEnd = newEnd;
       
-      // Ensure the line itself doesn't invert
-      if (adjustedStart >= adjustedEnd - 0.1) {
-         // keep it a minimum of 100ms
-         adjustedStart = adjustedEnd - 0.1;
-      }
-
-      const updated = { ...next[idx], start: adjustedStart, end: adjustedEnd };
-      next[idx] = updated;
+      let prevStart = null;
+      let nextStart = null;
+      let prevIdx = -1;
       
-      // Magnetic overlap - Top (Previous Line)
-      if (idx > 0) {
-        const prevLine = next[idx - 1];
-        // If we drag start to the left of prevLine's end
-        if (prevLine.start !== null && prevLine.end !== null && adjustedStart < prevLine.end) {
-          // Push prevLine's end back, but don't let it crush completely (keep min 100ms)
-          const newPrevEnd = Math.max(prevLine.start + 0.1, adjustedStart);
-          next[idx - 1] = { ...prevLine, end: newPrevEnd };
-          
-          // If we pushed it so hard that we hit its start, we should ideally push its start too...
-          // But for a simple casual editor, just bounding the end is usually enough.
-          // To be totally solid, we adjust the start as well if we crushed it:
-          if (adjustedStart <= prevLine.start + 0.1) {
-            next[idx - 1] = { ...next[idx-1], start: adjustedStart - 0.1 };
-          }
+      // Find the closest placed line BEFORE this one
+      for (let i = idx - 1; i >= 0; i--) {
+        if (next[i].start !== null) {
+          prevStart = next[i].start as number;
+          prevIdx = i;
+          break;
+        }
+      }
+      
+      // Find the closest placed line AFTER this one
+      for (let i = idx + 1; i < next.length; i++) {
+        if (next[i].start !== null) {
+          nextStart = next[i].start as number;
+          break;
         }
       }
 
-      // Magnetic overlap - Bottom (Next Line)
-      if (idx < next.length - 1) {
-        const nextLine = next[idx + 1];
-        // If we drag end to the right of nextLine's start
-        if (nextLine.start !== null && nextLine.end !== null && adjustedEnd > nextLine.start) {
-          // Push nextLine's start forward
-          const newNextStart = Math.min(nextLine.end - 0.1, adjustedEnd);
-          next[idx + 1] = { ...nextLine, start: newNextStart };
-          
-          // If we pushed it so hard we hit its end:
-          if (adjustedEnd >= nextLine.end - 0.1) {
-             next[idx + 1] = { ...next[idx+1], end: adjustedEnd + 0.1 };
-          }
+      // 1. STRICT CHRONOLOGICAL CONSTRAINT: Cannot start before previous placed line
+      if (prevStart !== null && adjustedStart <= prevStart) {
+        adjustedStart = prevStart + 0.1;
+      }
+
+      // 2. STRICT CHRONOLOGICAL CONSTRAINT: Cannot start after next placed line
+      if (nextStart !== null && adjustedStart >= nextStart) {
+        adjustedStart = nextStart - 0.2;
+      }
+
+      // 3. Prevent inversion and maintain minimum duration
+      if (adjustedStart >= adjustedEnd - 0.1) {
+        adjustedEnd = adjustedStart + 0.1;
+      }
+
+      // 4. PREVENT OVERLAP (Optional but clean): 
+      if (nextStart !== null && adjustedEnd > nextStart) {
+        adjustedEnd = nextStart;
+        if (adjustedStart >= adjustedEnd - 0.1) {
+           adjustedStart = adjustedEnd - 0.1;
         }
       }
+
+      // 5. Do not let this line's start bleed before the closest previous line's end
+      if (prevIdx >= 0 && next[prevIdx].end !== null) {
+        const prevEnd = next[prevIdx].end as number;
+        if (adjustedStart < prevEnd) {
+           // Push the previous line's end back to make room
+           next[prevIdx] = { ...next[prevIdx], end: adjustedStart };
+        }
+      }
+
+      next[idx] = { ...next[idx], start: adjustedStart, end: adjustedEnd };
 
       return next;
     });
@@ -1193,20 +1210,21 @@ export default function KaraokeStudio() {
                       </button>
                       <button onClick={(e) => { 
                         e.stopPropagation(); 
-                        if (window.confirm("Wipe all sync timings? This cannot be undone.")) {
+                        if (window.confirm("Wipe out all lyrics entirely? This cannot be undone.")) {
                           if (isPlaying) stopPreview();
                           if (audioRef.current) {
                             audioRef.current.pause();
                             audioRef.current.currentTime = 0;
                           }
                           setCurrentTime(0);
-                          setLyrics(prev => prev.map(l => ({ ...l, start: null, end: null }))); 
+                          setLyrics([]); 
+                          setRawLyricsText('');
                           setActiveLineIndex(0); 
                           setIsSpacebarDown(false); 
                           setIsSyncSessionActive(false);
                         }
                       }} className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 text-red-500 text-xs font-bold rounded-full transition-colors border border-red-500/20">
-                        Clear All
+                        Clear All Lyrics
                       </button>
                     </div>
                   </div>
@@ -1264,9 +1282,10 @@ export default function KaraokeStudio() {
                           >
                             {isTarget && (isSyncSessionActive || isPlaying) && <div className="text-[#38bdf8] animate-pulse text-xl md:text-3xl">▶</div>}
                             <div 
-                              className="text-2xl md:text-4xl font-black text-center transition-colors duration-200"
+                              className="text-2xl md:text-4xl font-black text-center transition-colors duration-200 flex items-center gap-4"
                               style={{ color: textColor }}
                             >
+                              <span className="text-xl md:text-2xl font-mono opacity-30 shrink-0">{idx + 1}.</span>
                               {line.text}
                             </div>
                             {isTarget && (isSyncSessionActive || isPlaying) && <div className="text-[#38bdf8] animate-pulse text-xl md:text-3xl">◀</div>}
