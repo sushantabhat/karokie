@@ -1001,120 +1001,86 @@ export default function KaraokeStudio() {
         </div>
 
         {/* RIGHT SIDE: Transport & Actions */}
-        <div className="flex items-center md:items-center flex-wrap md:flex-nowrap gap-x-4 md:gap-x-6 gap-y-2 justify-between">
-          {/* Transport Controls */}
-          <div className="flex items-center gap-1 bg-transparent p-1.5 rounded-full border border-edge/20 light:border-edge">
-            <button 
-              onClick={handlePlayPauseClick} 
-              disabled={isRecording || !trackBuffer}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                (isPlaying)
-                  ? 'bg-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]'
-                  : 'bg-transparent text-[#10b981] hover:bg-control hover:text-[#10b981] disabled:opacity-50 disabled:pointer-events-none'
-              }`}
-              title="Play/Pause"
-            >
-              {(isPlaying) ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-1" />}
-            </button>
+        <div className="flex flex-col md:flex-row items-center md:items-center gap-3 md:gap-6 w-full md:w-auto mt-2 md:mt-0 pb-2 md:pb-0">
+          {/* Transport & Utilities Row on Mobile */}
+          <div className="flex items-center justify-between md:justify-center w-full md:w-auto gap-2">
+            {/* Transport Controls */}
+            <div className="flex items-center gap-1 bg-transparent p-1.5 rounded-full border border-edge/20 light:border-edge">
+              <button 
+                onClick={handlePlayPauseClick} 
+                disabled={isRecording || !trackBuffer}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  (isPlaying)
+                    ? 'bg-[#10b981] text-white shadow-[0_0_10px_rgba(16,185,129,0.4)]'
+                    : 'bg-transparent text-[#10b981] hover:bg-control hover:text-[#10b981] disabled:opacity-50 disabled:pointer-events-none'
+                }`}
+                title="Play/Pause"
+              >
+                {(isPlaying) ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-1" />}
+              </button>
 
-            <button 
-              onClick={handleStartRecording}
-              disabled={isRecording || isPlaying || !trackFile || activeTab === "SYNC"}
-              className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
-                isRecording 
-                  ? 'bg-transparent border-2 border-[#ef4444] shadow-[0_0_15px_rgba(239,68,68,0.7)] animate-pulse' 
-                  : 'bg-transparent text-[#ef4444] hover:bg-control disabled:opacity-50 disabled:pointer-events-none'
-              }`}
-              title="Record"
-            >
-              <div className={`rounded-full transition-all ${isRecording ? 'w-3 h-3 bg-[#ef4444]' : 'w-3 h-3 bg-[#ef4444]'}`} />
-            </button>
+              <button 
+                onClick={handleStartRecording}
+                disabled={isRecording || isPlaying || !trackFile || activeTab === "SYNC"}
+                className={`w-10 h-10 rounded-full flex items-center justify-center transition-all ${
+                  isRecording 
+                    ? 'bg-transparent border-2 border-[#ef4444] shadow-[0_0_15px_rgba(239,68,68,0.7)] animate-pulse' 
+                    : 'bg-transparent text-[#ef4444] hover:bg-control disabled:opacity-50 disabled:pointer-events-none'
+                }`}
+                title="Record"
+              >
+                <div className={`rounded-full transition-all ${isRecording ? 'w-3 h-3 bg-[#ef4444]' : 'w-3 h-3 bg-[#ef4444]'}`} />
+              </button>
 
-            <button 
-              onClick={handleStopClick}
-              disabled={!isRecording && !isPlaying && currentTime === 0}
-              className="w-10 h-10 rounded-full bg-transparent text-muted hover:bg-control hover:text-foreground flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none"
-              title="Stop"
-            >
-              <Square className="w-3 h-3 fill-current" />
-            </button>
+              <button 
+                onClick={handleStopClick}
+                disabled={!isRecording && !isPlaying && currentTime === 0}
+                className="w-10 h-10 rounded-full bg-transparent text-muted hover:bg-control hover:text-foreground flex items-center justify-center transition-colors disabled:opacity-50 disabled:pointer-events-none"
+                title="Stop"
+              >
+                <Square className="w-3 h-3 fill-current" />
+              </button>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button 
+                onClick={toggleTheme}
+                className="w-10 h-10 shrink-0 rounded-full bg-transparent border border-edge/20 light:border-edge text-muted hover:text-foreground hover:bg-control flex items-center justify-center transition-colors"
+                title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
+              >
+                {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
+              </button>
+
+              <button 
+                onClick={handleNewSession}
+                className="px-4 md:px-5 py-2 bg-transparent border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded-full text-xs font-bold transition-all flex items-center gap-2"
+                title="Clear all and start fresh"
+              >
+                <RotateCcw className="w-3.5 h-3.5" />
+                <span className="hidden sm:inline">Start Over</span>
+              </button>
+            </div>
           </div>
-
-            <button 
-              onClick={toggleTheme}
-              className="w-10 h-10 shrink-0 rounded-full bg-transparent border border-edge/20 light:border-edge text-muted hover:text-foreground hover:bg-control flex items-center justify-center transition-colors"
-              title={theme === 'dark' ? 'Switch to Light Mode' : 'Switch to Dark Mode'}
-            >
-              {theme === 'dark' ? <Sun className="w-4 h-4" /> : <Moon className="w-4 h-4" />}
-            </button>
-
-            <button 
-              onClick={handleNewSession}
-              className="px-4 md:px-5 py-2 bg-transparent border border-red-500/30 text-red-500 hover:bg-red-500/10 rounded-full text-xs font-bold transition-all flex items-center gap-2"
-              title="Clear all and start fresh"
-            >
-              <RotateCcw className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Start Over</span>
-            </button>
 
           <div className="hidden md:block h-6 w-px bg-control" />
 
           {/* Action Buttons based on Tab */}
-          <div className="flex items-center flex-wrap md:flex-nowrap gap-3">
+          <div className="flex items-center justify-start md:justify-center w-full md:w-auto gap-2 md:gap-3 overflow-x-auto no-scrollbar pb-1 md:pb-0 scroll-smooth">
             <button 
               onClick={() => setShowDraftsModal(true)}
-              className="px-4 md:px-5 py-2 bg-transparent border border-[#1db954]/30 text-[#1db954] hover:bg-[#1db954]/10 rounded-full text-xs font-bold transition-all flex items-center gap-2"
+              className="px-3 md:px-5 py-2 shrink-0 bg-transparent border border-[#1db954]/30 text-[#1db954] hover:bg-[#1db954]/10 rounded-full text-xs font-bold transition-all flex items-center gap-1.5"
             >
               <FolderOpen className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">My Drafts</span>
+              <span>My Drafts</span>
             </button>
             <button 
               onClick={handleSaveDraftClick}
               disabled={!trackFile || lyrics.length === 0}
-              className="px-4 md:px-5 py-2 bg-transparent border border-edge/20 light:border-edge text-foreground hover:bg-control rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
+              className="px-3 md:px-5 py-2 shrink-0 bg-transparent border border-edge/20 light:border-edge text-foreground hover:bg-control rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-1.5"
             >
               <Save className="w-3.5 h-3.5" />
-              {isSavingDraft ? "Saving..." : <><span className="hidden sm:inline">Save Draft</span></>}
+              {isSavingDraft ? "Saving..." : <span>Save Draft</span>}
             </button>
-            <div className="hidden md:block h-6 w-px bg-control mx-2" />
-
-            {activeTab === "MIXER" && (
-              <>
-                <button
-                  onClick={() => document.getElementById('file-upload')?.click()}
-                  className="px-4 md:px-5 py-2 bg-control hover:bg-control-hover text-foreground rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none"
-                  title="Upload Instrumental"
-                >
-                  <span className="hidden sm:inline">Upload Track</span><span className="sm:hidden">Track</span>
-                </button>
-                <button
-                  onClick={handleExportClick}
-                  disabled={isProcessing || !recordedBlob}
-                  className="px-4 md:px-5 py-2 bg-foreground text-background hover:opacity-90 rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
-                >
-                  {isProcessing ? 'Processing...' : <><span className="hidden sm:inline">Download Mix</span><span className="sm:hidden">Mix</span></>}
-                </button>
-              </>
-            )}
-            
-            {(activeTab === "SYNC" || activeTab === "EDIT") && (
-              <>
-                <button
-                  onClick={() => document.getElementById('lrc-upload')?.click()}
-                  className="px-4 md:px-5 py-2 bg-control hover:bg-control-hover text-foreground rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none"
-                  title="Upload LRC"
-                >
-                  <span className="hidden sm:inline">Upload .LRC</span><span className="sm:hidden">Upload</span>
-                </button>
-                <button
-                  onClick={handleExportLRC}
-                  disabled={lyrics.length === 0 || !trackFile}
-                  className="px-4 md:px-5 py-2 bg-foreground text-background hover:opacity-90 rounded-full text-xs font-medium transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center gap-2"
-                >
-                  <span className="hidden sm:inline">Download .LRC</span><span className="sm:hidden">Download</span>
-                </button>
-              </>
-            )}
           </div>
         </div>
 
@@ -1244,9 +1210,9 @@ export default function KaraokeStudio() {
 
           {/* TRACK 1: BACKING TRACK */}
           <div className="flex flex-col md:flex-row md:h-36 border border-edge/20 light:border-edge bg-panel rounded-xl overflow-hidden shadow-sm">
-            <div className="w-full md:w-72 p-4 md:p-5 flex md:flex-col justify-between items-center md:items-stretch gap-3 md:gap-0 border-b md:border-b-0 md:border-r border-edge/20 light:border-edge shrink-0 bg-panel">
-              <div className="flex-1 flex md:block items-center justify-between md:justify-start gap-2 w-full">
-                <div className="flex justify-between items-start mb-0 md:mb-2 w-full">
+            <div className="w-full md:w-72 p-4 md:p-5 flex flex-col justify-center md:justify-between items-stretch gap-4 md:gap-3 border-b md:border-b-0 md:border-r border-edge/20 light:border-edge shrink-0 bg-panel">
+              <div className="w-full flex flex-col gap-1 min-w-0">
+                <div className="flex justify-between items-center w-full">
                   <div className="flex items-center gap-2 overflow-hidden pr-2">
                     <span className="font-bold text-sm text-foreground truncate">🎵 Instrumental Track</span>
                   </div>
@@ -1292,7 +1258,7 @@ export default function KaraokeStudio() {
                   </div>
                 </div>
                 {trackFile && <span className="text-xs text-secondary font-medium truncate block">{trackFile.name}</span>}
-                {trackBuffer && <span className="text-[11px] font-mono text-foreground mt-1.5 inline-block">{formatTime(currentTime)} / {formatTime(trackBuffer.duration)}</span>}
+                {trackBuffer && <span className="text-[11px] font-mono text-foreground mt-0.5 inline-block">{formatTime(currentTime)} / {formatTime(trackBuffer.duration)}</span>}
               </div>
               
               <div className="flex items-center gap-3">
@@ -1341,9 +1307,9 @@ export default function KaraokeStudio() {
 
           {/* TRACK 2: VOCALS */}
           <div className="flex flex-col md:flex-row md:h-36 border border-edge/20 light:border-edge bg-panel rounded-xl overflow-hidden shadow-sm">
-            <div className="w-full md:w-72 p-4 md:p-5 flex md:flex-col justify-between items-center md:items-stretch gap-3 md:gap-0 border-b md:border-b-0 md:border-r border-edge/20 light:border-edge shrink-0 bg-panel">
-              <div className="flex-1 flex md:block items-center justify-between md:justify-start gap-2 w-full">
-                <div className="flex justify-between items-start mb-0 md:mb-2 w-full">
+            <div className="w-full md:w-72 p-4 md:p-5 flex flex-col justify-center md:justify-between items-stretch gap-4 md:gap-3 border-b md:border-b-0 md:border-r border-edge/20 light:border-edge shrink-0 bg-panel">
+              <div className="w-full flex flex-col gap-1 min-w-0">
+                <div className="flex justify-between items-center w-full">
                   <div className="flex items-center gap-2 overflow-hidden pr-2">
                     <div className={`w-2 h-2 rounded-full shrink-0 ${isRecording ? 'bg-[#ef4444] animate-pulse shadow-[0_0_10px_rgba(239,68,68,0.8)]' : 'bg-edge'}`} />
                     <span className="font-bold text-sm text-foreground truncate">🎤 Your Voice</span>
@@ -1398,7 +1364,7 @@ export default function KaraokeStudio() {
                     </button>
                   </div>
                 </div>
-                {vocalBuffer && <span className="text-[11px] font-mono text-[#fb7185] mt-1.5 inline-block">{formatTime(currentTime)} / {formatTime(vocalBuffer.duration)}</span>}
+                {vocalBuffer && <span className="text-[11px] font-mono text-[#fb7185] mt-0.5 inline-block">{formatTime(currentTime)} / {formatTime(vocalBuffer.duration)}</span>}
               </div>
               
               <div className="flex items-center gap-3">
@@ -1463,7 +1429,11 @@ export default function KaraokeStudio() {
                 />
                 <span className="text-sm font-mono font-medium text-foreground w-12 md:w-14 text-right">{mixSettings.latencyOffsetMs}ms</span>
               </div>
-              <div className="flex items-center gap-3 md:gap-4 mt-6 flex-wrap">
+              <span className="text-xs font-medium text-secondary mt-1.5 mb-5 block">
+                Nudge timing backward or forward if your Bluetooth mic or headphones have delay.
+              </span>
+
+              <div className="flex items-center gap-3 md:gap-4 flex-wrap">
                 <span className="text-sm font-medium text-muted w-20 md:w-24">Count-in (4 beats)</span>
                 <button 
                   onClick={() => updateSetting("countInEnabled", !mixSettings.countInEnabled)}
@@ -1483,11 +1453,8 @@ export default function KaraokeStudio() {
                   </>
                 )}
               </div>
-              <span className="text-xs font-medium text-secondary mt-3 block">
+              <span className="text-xs font-medium text-secondary mt-1.5 block">
                 Plays a 4-beat click before recording starts so you can catch the beat.
-              </span>
-              <span className="text-xs font-medium text-secondary mt-1 block">
-                Nudge timing backward or forward if your Bluetooth mic or headphones have delay.
               </span>
 
             </div>
@@ -1512,6 +1479,18 @@ export default function KaraokeStudio() {
               </div>
 
             </div>
+          </div>
+          </div>
+
+          {/* Export Audio Button - At bottom of Mixer */}
+          <div className="flex justify-center mt-4 mb-2">
+            <button
+              onClick={handleExportClick}
+              disabled={isProcessing || !recordedBlob}
+              className="w-full md:w-auto px-12 py-3 bg-foreground text-background hover:scale-[1.02] active:scale-[0.98] rounded-full text-base font-bold transition-all disabled:opacity-50 disabled:pointer-events-none flex items-center justify-center gap-2 shadow-lg"
+            >
+              {isProcessing ? 'Processing Mix...' : 'Export Final Audio'}
+            </button>
           </div>
           </div>
         ) : (
@@ -1711,7 +1690,7 @@ export default function KaraokeStudio() {
                               className="text-2xl md:text-4xl font-bold transition-colors duration-200 flex items-start justify-start gap-4 flex-1"
                               style={{ color: textColor }}
                             >
-                              <span className="text-xl md:text-2xl font-mono opacity-30 shrink-0 w-8 text-right mt-1.5">{idx + 1}.</span>
+                              <span className="text-xl md:text-2xl font-mono opacity-50 shrink-0 w-8 text-right mt-1.5">{idx + 1}.</span>
                               <span className="flex-1 text-left leading-tight">{line.text}</span>
                             </div>
                           </div>
@@ -1739,7 +1718,7 @@ export default function KaraokeStudio() {
               </div>
             ) : (
               <div className="flex-1 flex flex-col h-full min-h-0">
-                <div className="text-center text-sm font-bold text-secondary py-2 mb-2">
+                <div className="text-center text-xs md:text-sm font-bold text-secondary py-2 mb-2 px-2">
                   Drag the blocks or the left/right handles to fine-tune the timing.
                 </div>
                 <div className="flex-1 shrink-0 bg-transparent rounded-xl border border-edge/20 light:border-edge">

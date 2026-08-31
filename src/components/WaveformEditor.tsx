@@ -222,7 +222,7 @@ const colors = getColors(theme);
         contentEl.appendChild(textSpan);
 
         // Alternate region background colors to clearly separate them
-        const regionColor = i % 2 === 0 ? 'rgba(56, 189, 248, 0.25)' : 'rgba(168, 85, 247, 0.25)'; // Sky blue vs Purple
+        const regionColor = i % 2 === 0 ? 'rgba(236, 72, 153, 0.3)' : 'rgba(168, 85, 247, 0.3)'; // Pink vs Purple
 
         regions.current!.addRegion({
           start: wStart,
@@ -342,27 +342,27 @@ const colors = getColors(theme);
             Error: {errorMsg}
           </div>
         )}
-        <div className="p-2 md:p-3 border-b border-edge/20 light:border-edge flex flex-wrap items-center justify-between shrink-0 gap-2">
-          <h3 className="font-bold text-foreground flex items-center gap-2 text-sm">
+        <div className="p-2 md:p-3 border-b border-edge/20 light:border-edge flex items-center justify-between shrink-0 gap-1 md:gap-2">
+          <h3 className="font-bold text-foreground flex items-center gap-2 text-sm shrink-0 pr-2">
             <span className="text-[#38bdf8] hidden sm:inline">Global Timeline</span><span className="text-[#38bdf8] sm:hidden">Timeline</span>
           </h3>
-          <div className="flex items-center gap-2 md:gap-4">
-            <div className="flex items-center gap-2 px-3 py-1 bg-background rounded-full border border-edge/20 light:border-edge">
-              <span className="text-xs font-mono text-[#38bdf8]">{formatTime(currentTime)}</span>
-              <span className="text-xs font-mono text-secondary hidden sm:inline">/ {formatTime(duration)}</span>
+          <div className="flex items-center gap-1 md:gap-4 flex-1 justify-end overflow-x-auto no-scrollbar">
+            <div className="flex items-center gap-2 px-2 md:px-3 py-1 bg-background rounded-full border border-edge/20 light:border-edge shrink-0">
+              <span className="text-[10px] md:text-xs font-mono text-[#38bdf8]">{formatTime(currentTime)}</span>
+              <span className="text-[10px] md:text-xs font-mono text-secondary hidden sm:inline">/ {formatTime(duration)}</span>
             </div>
-            <div className="flex items-center gap-2">
-              <button onClick={() => setZoom(z => Math.max(10, z - 20))} className="p-1.5 text-muted hover:text-foreground rounded hover:bg-control" aria-label="Zoom out">
-                <ZoomOut className="w-4 h-4" />
+            <div className="flex items-center gap-0.5 md:gap-2 shrink-0">
+              <button onClick={() => setZoom(z => Math.max(10, z - 20))} className="p-1 md:p-1.5 text-muted hover:text-foreground rounded hover:bg-control" aria-label="Zoom out">
+                <ZoomOut className="w-3.5 h-3.5 md:w-4 md:h-4" />
               </button>
-              <span className="text-xs font-mono text-secondary w-10 md:w-12 text-center">{zoom}px</span>
-              <button onClick={() => setZoom(z => Math.min(300, z + 20))} className="p-1.5 text-muted hover:text-foreground rounded hover:bg-control" aria-label="Zoom in">
-                <ZoomIn className="w-4 h-4" />
+              <span className="text-[10px] md:text-xs font-mono text-secondary w-8 md:w-12 text-center">{zoom}px</span>
+              <button onClick={() => setZoom(z => Math.min(300, z + 20))} className="p-1 md:p-1.5 text-muted hover:text-foreground rounded hover:bg-control" aria-label="Zoom in">
+                <ZoomIn className="w-3.5 h-3.5 md:w-4 md:h-4" />
               </button>
             </div>
-            <div className="h-4 w-px bg-control" />
-            <button onClick={togglePlay} className="w-9 h-9 md:w-8 md:h-8 flex items-center justify-center bg-foreground text-background rounded-full hover:bg-[#0ea5e9] transition-colors">
-              {isPlaying ? <Pause className="w-4 h-4 fill-current" /> : <Play className="w-4 h-4 fill-current ml-0.5" />}
+            <div className="h-4 w-px bg-control mx-1 md:mx-0 shrink-0" />
+            <button onClick={togglePlay} className="w-7 h-7 md:w-8 md:h-8 shrink-0 flex items-center justify-center bg-foreground text-background rounded-full hover:bg-[#0ea5e9] transition-colors">
+              {isPlaying ? <Pause className="w-3.5 h-3.5 md:w-4 md:h-4 fill-current" /> : <Play className="w-3.5 h-3.5 md:w-4 md:h-4 fill-current ml-0.5" />}
             </button>
           </div>
         </div>
@@ -398,8 +398,8 @@ const colors = getColors(theme);
                     }`}
                   >
                     <div className="flex items-center gap-3 max-w-full justify-center">
-                      <span className={`font-mono shrink-0 ${isActive ? 'text-xl text-[#38bdf8] light:text-[#0369a1] opacity-50' : 'text-sm text-secondary light:text-slate-400 opacity-30'}`}>{idx + 1}.</span>
-                      <span className={`truncate text-center ${isActive ? 'text-xl md:text-3xl font-black text-foreground font-semibold drop-shadow-sm' : isActive === false && isPast ? 'text-base md:text-xl font-bold text-edge light:text-slate-400' : 'text-base md:text-xl font-bold text-secondary light:text-slate-400'}`}>
+                      <span className={`font-mono shrink-0 ${isActive ? 'text-xl text-[#38bdf8] light:text-[#0369a1] opacity-50' : 'text-sm text-secondary opacity-50'}`}>{idx + 1}.</span>
+                      <span className={`truncate text-center ${isActive ? 'text-xl md:text-3xl font-black text-foreground font-semibold drop-shadow-sm' : isActive === false && isPast ? 'text-base md:text-xl font-bold text-edge light:text-slate-400' : 'text-base md:text-xl font-bold text-secondary'}`}>
                         {line.text}
                       </span>
                     </div>
