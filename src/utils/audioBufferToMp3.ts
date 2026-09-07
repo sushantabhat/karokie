@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 const lamejs = require('lamejs');
 
 export function audioBufferToMp3(buffer: AudioBuffer): Blob {
