@@ -1480,7 +1480,6 @@ export default function KaraokeStudio() {
 
             </div>
           </div>
-          </div>
 
           {/* Export Audio Button - At bottom of Mixer */}
           <div className="flex justify-center mt-4 mb-2">
