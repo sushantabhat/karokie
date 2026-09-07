@@ -438,10 +438,12 @@ export default function KaraokeStudio() {
       setHeadphonesConfirmed(true);
     }
 
+    let isContinueTake = false;
+
     if (vocalBuffer) {
       const takeMode = await showDialog({
         title: "Continue or Restart?",
-        message: "Do you want to continue your last take, or wipe it and start fresh?",
+        message: "Do you want to continue your last take, or wipe it and start fresh? (Continuing will play a 3-second pre-roll so you can catch the pitch).",
         type: "options",
         options: [
           { label: "Continue Take", value: "continue", style: "primary" },
@@ -453,6 +455,7 @@ export default function KaraokeStudio() {
       if (takeMode === "continue") {
         punchInTimeRef.current = vocalBuffer.duration;
         setCurrentTime(vocalBuffer.duration);
+        isContinueTake = true;
       } else {
         clearVocal();
         punchInTimeRef.current = 0;
@@ -464,7 +467,19 @@ export default function KaraokeStudio() {
 
     stopPreview();
     
-    if (mixSettings.countInEnabled && mixSettings.bpm) {
+    if (isContinueTake && punchInTimeRef.current > 0) {
+      const preRollDuration = 3; 
+      const preRollStart = Math.max(0, punchInTimeRef.current - preRollDuration);
+      const actualWaitTime = punchInTimeRef.current - preRollStart;
+      
+      if (actualWaitTime > 0) {
+         setIsCountingIn(true);
+         startPlayback(preRollStart);
+         await new Promise(resolve => setTimeout(resolve, actualWaitTime * 1000));
+         stopPreview();
+         setIsCountingIn(false);
+      }
+    } else if (mixSettings.countInEnabled && mixSettings.bpm) {
       setIsCountingIn(true);
       await playCountIn(mixSettings.bpm);
       setIsCountingIn(false);
