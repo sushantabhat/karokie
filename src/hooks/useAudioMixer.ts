@@ -344,7 +344,7 @@ export function useAudioMixer() {
       }
 
       const renderedBuffer = await offlineCtx.startRendering();
-      const wavBlob = audioBufferToMp3(renderedBuffer);
+      const wavBlob = await audioBufferToMp3(renderedBuffer);
       return wavBlob;
     } catch (err) {
       console.error('Export failed', err);

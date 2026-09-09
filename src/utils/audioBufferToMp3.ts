@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-require-imports, @typescript-eslint/no-explicit-any */
 const lamejs = require('lamejs');
 
-export function audioBufferToMp3(buffer: AudioBuffer): Blob {
+export async function audioBufferToMp3(buffer: AudioBuffer, onProgress?: (p: number) => void): Promise<Blob> {
   const channels = buffer.numberOfChannels;
   const sampleRate = buffer.sampleRate;
   const kbps = 128; // standard quality
@@ -20,6 +20,8 @@ export function audioBufferToMp3(buffer: AudioBuffer): Blob {
   
   const leftChunk = new Int16Array(sampleBlockSize);
   const rightChunk = new Int16Array(sampleBlockSize);
+
+  let chunksProcessed = 0;
 
   for (let i = 0; i < left.length; i += sampleBlockSize) {
     const chunkLength = Math.min(sampleBlockSize, left.length - i);
@@ -43,6 +45,13 @@ export function audioBufferToMp3(buffer: AudioBuffer): Blob {
     if (mp3buf.length > 0) {
       mp3Data.push(mp3buf);
     }
+
+    chunksProcessed++;
+    if (chunksProcessed % 100 === 0) {
+      if (onProgress) onProgress(i / left.length);
+      // Yield to main thread to prevent UI freeze
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
   }
 
   const mp3buf = mp3encoder.flush();
@@ -50,5 +59,6 @@ export function audioBufferToMp3(buffer: AudioBuffer): Blob {
     mp3Data.push(mp3buf);
   }
 
+  if (onProgress) onProgress(1);
   return new Blob(mp3Data, { type: 'audio/mp3' });
 }

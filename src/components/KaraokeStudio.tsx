@@ -474,15 +474,26 @@ export default function KaraokeStudio() {
       
       if (actualWaitTime > 0) {
          setIsCountingIn(true);
+         setCountdown(Math.ceil(actualWaitTime));
          startPlayback(preRollStart);
+         
+         const iv = setInterval(() => setCountdown(c => (c ? c - 1 : null)), 1000);
          await new Promise(resolve => setTimeout(resolve, actualWaitTime * 1000));
+         clearInterval(iv);
+         
          stopPreview();
          setIsCountingIn(false);
+         setCountdown(null);
       }
     } else if (mixSettings.countInEnabled && mixSettings.bpm) {
       setIsCountingIn(true);
+      setCountdown(4);
+      const beatDuration = (60 / mixSettings.bpm) * 1000;
+      const iv = setInterval(() => setCountdown(c => (c ? c - 1 : null)), beatDuration);
       await playCountIn(mixSettings.bpm);
+      clearInterval(iv);
       setIsCountingIn(false);
+      setCountdown(null);
     }
 
     resetRecording();
@@ -988,7 +999,12 @@ export default function KaraokeStudio() {
 
       <div className="h-screen flex flex-col bg-background text-foreground font-sans relative overflow-hidden">
       {isCountingIn && (
-        <div className="absolute inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-none">
+        <div className="absolute inset-0 z-50 flex flex-col items-center justify-center bg-black/50 backdrop-blur-sm pointer-events-auto">
+          {countdown !== null && countdown > 0 && (
+             <div className="text-8xl font-black text-white mb-4 animate-bounce drop-shadow-2xl">
+               {countdown}
+             </div>
+          )}
           <div className="text-5xl font-black text-[#10b981] animate-pulse drop-shadow-[0_0_15px_rgba(16,185,129,0.8)] tracking-widest">
             GET READY...
           </div>
