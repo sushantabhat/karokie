@@ -12,7 +12,8 @@ export function useAudioRecorder() {
   const analyserRef = useRef<AnalyserNode | null>(null);
   const chunksRef = useRef<BlobPart[]>([]);
 
-  const startRecording = useCallback(async () => {
+  const prepareRecording = useCallback(async () => {
+    if (streamRef.current) return;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({
         audio: {
@@ -23,8 +24,6 @@ export function useAudioRecorder() {
       });
       streamRef.current = stream;
       
-      // Set up AudioContext & Analyser for visualizer
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
       const ctx = new (window.AudioContext || (window as any).webkitAudioContext)();
       audioCtxRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
@@ -32,6 +31,18 @@ export function useAudioRecorder() {
       analyser.fftSize = 2048;
       source.connect(analyser);
       analyserRef.current = analyser;
+    } catch (err) {
+      console.error('Failed to access microphone', err);
+    }
+  }, []);
+
+  const startRecording = useCallback(async () => {
+    try {
+      if (!streamRef.current) {
+        await prepareRecording();
+      }
+      if (!streamRef.current) return;
+      const stream = streamRef.current;
 
       const mediaRecorder = new MediaRecorder(stream);
       mediaRecorderRef.current = mediaRecorder;
@@ -69,6 +80,7 @@ export function useAudioRecorder() {
       // Stop all tracks to release the microphone
       if (streamRef.current) {
         streamRef.current.getTracks().forEach((track) => track.stop());
+        streamRef.current = null;
       }
     }
   }, [isRecording, isPaused]);
@@ -98,6 +110,7 @@ export function useAudioRecorder() {
     isRecording,
     isPaused,
     recordedBlob,
+    prepareRecording,
     startRecording,
     stopRecording,
     pauseRecording,

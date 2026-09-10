@@ -233,7 +233,7 @@ export default function KaraokeStudio() {
   
   const { 
     isRecording, isPaused: isRecPaused, 
-    recordedBlob, setRecordedBlob, startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, getAnalyser 
+    recordedBlob, setRecordedBlob, prepareRecording, startRecording, stopRecording, pauseRecording, resumeRecording, resetRecording, getAnalyser 
   } = useAudioRecorder();
 
   const { 
@@ -467,21 +467,30 @@ export default function KaraokeStudio() {
 
     stopPreview();
     
+    // Pre-warm microphone so startRecording() is instant later
+    await prepareRecording();
+    
+    let actualWaitTime = 0;
+
     if (isContinueTake && punchInTimeRef.current > 0) {
       const preRollDuration = 3; 
       const preRollStart = Math.max(0, punchInTimeRef.current - preRollDuration);
-      const actualWaitTime = punchInTimeRef.current - preRollStart;
+      actualWaitTime = punchInTimeRef.current - preRollStart;
       
       if (actualWaitTime > 0) {
          setIsCountingIn(true);
          setCountdown(Math.ceil(actualWaitTime));
-         startPlayback(preRollStart);
+         
+         if (audioRef.current) {
+           audioRef.current.volume = Math.min(mixSettings.trackVolume / 100, 1);
+           audioRef.current.currentTime = preRollStart;
+           audioRef.current.play();
+         }
          
          const iv = setInterval(() => setCountdown(c => (c ? c - 1 : null)), 1000);
          await new Promise(resolve => setTimeout(resolve, actualWaitTime * 1000));
          clearInterval(iv);
          
-         stopPreview();
          setIsCountingIn(false);
          setCountdown(null);
       }
@@ -496,10 +505,14 @@ export default function KaraokeStudio() {
       setCountdown(null);
     }
 
+    if (isContinueTake && actualWaitTime > 0 && audioRef.current) {
+      punchInTimeRef.current = audioRef.current.currentTime;
+    }
+
     resetRecording();
     await startRecording();
     
-    if (audioRef.current) {
+    if (audioRef.current && (!isContinueTake || actualWaitTime <= 0)) {
       audioRef.current.volume = Math.min(mixSettings.trackVolume / 100, 1);
       audioRef.current.currentTime = punchInTimeRef.current;
       audioRef.current.play();
@@ -1177,14 +1190,8 @@ export default function KaraokeStudio() {
                                 className={`mb-6 w-full ${isCurrent ? 'scale-105 origin-left' : 'opacity-70'} transition-all`}
                                 ref={isCurrent ? (el) => el?.scrollIntoView({ behavior: 'smooth', block: 'center' }) : null}
                               >
-                                <span 
-                                  className="text-2xl md:text-3xl font-extrabold tracking-tight transition-all duration-75 block text-left"
-                                  style={{ 
-                                    backgroundImage: `linear-gradient(to right, #1db954 ${progress}%, var(--lyric-inactive) ${progress}%)`,
-                                    WebkitBackgroundClip: 'text',
-                                    WebkitTextFillColor: 'transparent',
-                                    filter: isCurrent && progress > 0 ? 'drop-shadow(0 0 10px rgba(29,185,84,0.3))' : 'none'
-                                  }}
+                                <span
+                                  className={`text-2xl md:text-3xl font-extrabold tracking-tight transition-all duration-200 block text-left ${isCurrent ? 'text-foreground drop-shadow-[0_0_10px_rgba(255,255,255,0.1)]' : 'text-secondary'}`}
                                 >
                                   {line.text}
                                 </span>
@@ -1211,13 +1218,7 @@ export default function KaraokeStudio() {
                             return (
                               <div className="relative inline-block text-center px-4 w-full">
                                 <span 
-                                  className="text-3xl md:text-4xl md:text-5xl font-extrabold inline-block mx-1 leading-tight tracking-tight transition-all duration-75"
-                                  style={{ 
-                                    backgroundImage: `linear-gradient(to right, #1db954 ${progress}%, var(--lyric-inactive) ${progress}%)`,
-                                    WebkitBackgroundClip: 'text',
-                                    WebkitTextFillColor: 'transparent',
-                                    filter: progress > 0 ? 'drop-shadow(0 0 12px rgba(29,185,84,0.3))' : 'none'
-                                  }}
+                                  className={`text-3xl md:text-4xl md:text-5xl font-extrabold inline-block mx-1 leading-tight tracking-tight transition-all duration-200 ${progress > 0 ? 'text-foreground' : 'text-secondary'} drop-shadow-[0_0_12px_rgba(255,255,255,0.1)]`}
                                 >
                                   {currentLine.text}
                                 </span>
